@@ -1,0 +1,56 @@
+<html>
+<head>
+    <title>WebSocket demo</title>
+</head>
+<body>
+
+    <div>
+        <form>
+            <label for="name">Name:</label>
+            <input type="text" id="name" placeholder="Message name" value="test"/><br />
+            <label for="body">Body: </label>
+            <input type="text" id="body" placeholder="Message body"/><br />
+            <button type="button" id="sendBtn">Send</button>
+        </form>
+    </div>
+    <div id="container"></div>
+
+    <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+    <script type="text/javascript">
+        $(function () {
+            let ws
+            if (window.WebSocket === undefined) {
+                $("#container").append("Your browser does not support WebSockets");
+                return;
+            } else {
+                ws = initWS()
+            }
+            function initWS() {
+                let socket = new WebSocket("ws://localhost:8080/ws")
+                let container = $("#container")
+
+                socket.onopen = function() {
+                    container.append("<p>Socket is open</p>")
+                }
+                socket.onmessage = function (e) {
+                    console.log(e)
+                    container.append("<p> Got some shit:" + e.data + "</p>")
+                }
+                socket.onclose = function (event) {
+                    container.append("<p>Socket closed</p>")
+                    console.log('Kod: ' + event.code + ' reason: ' + event.reason)
+                }
+
+                return socket
+            }
+            $("#sendBtn").click(function (e) {
+                e.preventDefault()
+                ws.send(JSON.stringify({ 
+                    name: $("#name").val(),
+                    body: $("#body").val()
+                }))
+            })
+        })
+    </script>
+</body>
+</html>
