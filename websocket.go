@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
-	"github.com/kjk/betterguid"
+	"github.com/pkg/errors"
 	"log"
 	"net/http"
 	"reflect"
@@ -18,13 +18,14 @@ import (
 type Server struct {
 	connections 	map[*Conn]bool
 	broadcast 		chan interface{}
+	channels		map[string]*channel
 
 	callbacks 		map[string]HandlerFunc
 
 	onConnect		func(c *Conn)
 
 	done 			chan bool
-	lock 			sync.Mutex
+	mu 				sync.Mutex
 }
 
 // Message is a struct for data which sending between application and clients
@@ -42,17 +43,18 @@ type Message struct {
 type HandlerFunc func (c *Conn, msg *Message)
 
 // Create a new websocket server handler with the provided options.
-func Create() Server {
-	return Server{
+func Create() *Server {
+	return &Server{
 		connections: make(map[*Conn]bool),
 		broadcast: make(chan interface{}),
+		channels: make(map[string]*channel),
 		callbacks: make(map[string]HandlerFunc),
 		done: make(chan bool, 1),
 	}
 }
 
 // CreateAndRun instantly create and run websocket server
-func CreateAndRun() Server {
+func CreateAndRun() *Server {
 	srv := Create()
 	srv.Run()
 
@@ -74,33 +76,31 @@ func (s *Server) Handler (w http.ResponseWriter, r *http.Request) {
 	}
 	defer con.Close()
 
-	connection := &Conn{
-		id: betterguid.New(),
-		conn: con,
-	}
+	connection, err := NewConn(con)
 
-	s.lock.Lock()
+	s.mu.Lock()
 	s.connections[connection] = true
-	s.lock.Unlock()
+	s.mu.Unlock()
 
 	if !reflect.ValueOf(s.onConnect).IsNil() {
 		s.onConnect(connection)
 	}
+
 	s.listener(connection)
 }
 
 // Set function which will be called when new connections come
 func (s *Server) OnConnect (f func(c *Conn)) {
-	s.lock.Lock()
+	s.mu.Lock()
 	s.onConnect = f
-	s.lock.Unlock()
+	s.mu.Unlock()
 }
 
 // Adding callback for specific message name
 func (s *Server) On (name string, f HandlerFunc) {
-	s.lock.Lock()
+	s.mu.Lock()
 	s.callbacks[name] = f
-	s.lock.Unlock()
+	s.mu.Unlock()
 }
 
 // Sending message to all connections.
@@ -140,7 +140,7 @@ func (s *Server) Broadcast() error {
 // Shutdown must be called before application died
 // its goes throw all connection and closing it
 // and stopping goroutines with broadcaster loop
-func (s *Server) Shutdown() {
+func (s *Server) Shutdown() error {
 	l := len(s.connections)
 	var wg sync.WaitGroup
 	wg.Add(l)
@@ -154,16 +154,44 @@ func (s *Server) Shutdown() {
 
 	wg.Wait()
 	s.done <- true
+
+	return nil
+}
+
+// NewChannel will create new channel with specific name.
+// Return error if something goes wrong.
+// Channel must have unique name!
+func (s *Server) NewChannel (name string) (*channel, error) {
+	if s.channels[name] != nil {
+		return nil, errors.New(fmt.Sprintf("websocket: channel with name %s, already exist", name))
+	}
+
+	c, err := CreateChannel(name)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	s.channels[name] = c
+	s.mu.Unlock()
+
+	return c, nil
+}
+
+// Count return number of active connections
+func (s *Server) Count () int {
+	return len(s.connections)
 }
 
 func (s *Server) listener (c *Conn) {
 	for {
 		b, op, err := wsutil.ReadClientData(c.conn)
+		log.Print(op)
 
 		if err != nil {
-			s.lock.Lock()
+			s.mu.Lock()
 			delete(s.connections, c)
-			s.lock.Unlock()
+			s.mu.Unlock()
 			break
 		}
 
@@ -184,8 +212,6 @@ func (s *Server) listener (c *Conn) {
 			c.Pong()
 		case ws.OpPong:
 			c.Ping()
-		default:
-			c.Close()
 		}
 	}
 }
@@ -206,12 +232,18 @@ func (s *Server) processMessage (c *Conn, b []byte) {
 	s.notFound(c, &msg)
 }
 
-func (s *Server) closeConnection (c *Conn, code ws.StatusCode, reason string) {
+func (s *Server) closeConnection (c *Conn, code ws.StatusCode, reason string) error {
 	c.CloseWithStatus(code, reason)
 
-	s.lock.Lock()
+	if !s.connections[c] {
+		return errors.New("websocket: unable to find connection")
+	}
+
+	s.mu.Lock()
 	delete(s.connections, c)
-	s.lock.Unlock()
+	s.mu.Unlock()
+
+	return nil
 }
 
 func (s *Server) notFound(c *Conn, msg *Message) {

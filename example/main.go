@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/exelban/websocket"
 	"github.com/go-chi/chi"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,10 +15,19 @@ func main () {
 	var srv *http.Server
 
 	r := chi.NewRouter()
-	ws := websocket.CreateAndRun()
+	server := websocket.CreateAndRun()
+	channel, _ := server.NewChannel("test")
 
-	r.Get("/ws", ws.Handler)
-	ws.On("test", func(c *websocket.Conn, msg *websocket.Message) {
+	server.OnConnect(func(c *websocket.Conn) {
+		err := channel.Add(c)
+		if err != nil {
+			log.Print(err)
+			return
+		}
+	})
+
+	r.Get("/ws", server.Handler)
+	server.On("test", func(c *websocket.Conn, msg *websocket.Message) {
 		c.Emit("WoW", "Test")
 	})
 
@@ -26,7 +36,7 @@ func main () {
 		stop := make(chan os.Signal, 1)
 		signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 		<-stop
-		ws.Shutdown()
+		server.Shutdown()
 		srv.Shutdown(ctx)
 		cancel()
 	}()

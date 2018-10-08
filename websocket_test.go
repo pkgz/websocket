@@ -16,7 +16,7 @@ var addr = flag.String("addr", "localhost:8080", "http service address")
 func TestCreate(t *testing.T) {
 	ws := Create()
 
-	require.Equal(t, len(ws.connections), 0, "connection list must be empty")
+	require.Equal(t, ws.Count(), 0, "connection list must be empty")
 	require.Equal(t, len(ws.broadcast), 0, "broadcast channel must be empty")
 	require.Equal(t, len(ws.callbacks), 0, "callbacks list must be empty")
 	require.Equal(t, len(ws.done), 0, "done channel must be empty")
@@ -32,7 +32,7 @@ func TestCreateAndRun(t *testing.T) {
 	}
 	defer c.Close()
 
-	require.Equal(t, len(ws.connections), 1, "must be 1 connection active")
+	require.Equal(t, ws.Count(), 1, "must be 1 connection active")
 }
 
 func TestServer_Handler(t *testing.T) {
@@ -220,32 +220,8 @@ func TestServer_Shutdown(t *testing.T) {
 	require.Equal(t, len(ws.done), 1, "done channel cannot be empty")
 }
 
-//func TestConn_Ping(t *testing.T) {
-//	wsServer()
-//
-//	u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
-//	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-//	if err != nil {
-//		t.Fatal("dial:", err)
-//	}
-//	defer c.Close()
-//
-//	err = c.WriteControl(9, []byte("ping"), time.Now().Add(5*time.Second))
-//	if err != nil {
-//		t.Fatal(err)
-//	}
-//
-//	for {
-//		mt, message, err := c.ReadMessage()
-//		if err != nil {
-//			t.Fatal(err)
-//			break
-//		}
-//		log.Print(mt, message)
-//	}
-//}
 
-func wsServer () *Server {
+func wsServer () *server {
 	r := chi.NewRouter()
 	ws := CreateAndRun()
 
@@ -267,5 +243,5 @@ func wsServer () *Server {
 		srv.ListenAndServe()
 	}()
 
-	return &ws
+	return ws
 }
