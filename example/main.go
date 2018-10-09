@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/exelban/websocket"
 	"github.com/go-chi/chi"
 	"log"
@@ -11,24 +12,23 @@ import (
 	"syscall"
 )
 
+type Test struct {
+	Id string
+}
+
 func main () {
 	var srv *http.Server
 
 	r := chi.NewRouter()
 	server := websocket.CreateAndRun()
-	channel, _ := server.NewChannel("test")
 
-	server.OnConnect(func(c *websocket.Conn) {
-		err := channel.Add(c)
-		if err != nil {
-			log.Print(err)
-			return
-		}
-	})
+	ch := server.NewChannel("test")
 
 	r.Get("/ws", server.Handler)
-	server.On("test", func(c *websocket.Conn, msg *websocket.Message) {
-		c.Emit("WoW", "Test")
+
+	server.OnConnect(func(c *websocket.Conn) {
+		ch.Add(c)
+		ch.Emit(&websocket.Message{Name: "test", Body: fmt.Sprintf("Hello World to %d connections", ch.Count())})
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -39,11 +39,14 @@ func main () {
 		server.Shutdown()
 		srv.Shutdown(ctx)
 		cancel()
+		log.Print("[INFO] server stopped")
 	}()
 
 	srv = &http.Server{
 		Addr: ":8080",
 		Handler: r,
 	}
+
+	log.Print("[INFO] server started on port :8080")
 	srv.ListenAndServe()
 }
