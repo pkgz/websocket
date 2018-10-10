@@ -1,4 +1,4 @@
-// Package websocket implements the WebSocket protocol defined in RFC 6455.
+// Package websocket implements the WebSocket protocol with additional functions.
 package websocket
 
 import (
