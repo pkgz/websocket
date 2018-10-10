@@ -1,251 +1,258 @@
-// Package websocket implements the WebSocket protocol defined in RFC 6455.
+// Package websocket implements the WebSocket protocol with additional functions.
 package websocket
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
-	"github.com/pkg/errors"
-	"log"
+	"io"
 	"net/http"
 	"reflect"
 	"sync"
-	"unicode/utf8"
+	"time"
 )
 
-// Server allow to keep connection list, broadcast channel and callbacks list
+// Server allow to keep connection list, broadcast channel and callbacks list.
 type Server struct {
 	connections 	map[*Conn]bool
-	broadcast 		chan interface{}
-	channels		map[string]*channel
+	channels	 	map[string]*Channel
+	broadcast		chan *Message
+	callbacks		map[string]HandlerFunc
 
-	callbacks 		map[string]HandlerFunc
+	addConn			chan *Conn
+	delConn			chan *Conn
 
-	onConnect		func(c *Conn)
+	delChan			[]chan *Conn
 
+	onConnect		func (c *Conn)
+	onDisconnect	func (c *Conn)
+
+	shutdown		bool
 	done 			chan bool
-	mu 				sync.Mutex
 }
 
-// Message is a struct for data which sending between application and clients
-// Name using for matching callback function in On function
-// Body will be transformed to byte array and returned to callback
+// Message is a struct for data which sending between application and clients.
+// Name using for matching callback function in On function.
+// Body will be transformed to byte array and returned to callback.
 type Message struct {
 	Name string `json:"name"`
-	Body string `json:"body"`
+	Body []byte `json:"body"`
 }
 
-// HamdleFunc is a type for handle function
+// HandleFunc is a type for handle function
 // all function which has callback have this struct
 // as first element returns pointer to connection
-// its give oportunity to close connection or emit message to exactly this connection
+// its give opportunity to close connection or emit message to exactly this connection.
 type HandlerFunc func (c *Conn, msg *Message)
 
 // Create a new websocket server handler with the provided options.
-func Create() *Server {
+func Create () *Server {
 	return &Server{
 		connections: make(map[*Conn]bool),
-		broadcast: make(chan interface{}),
-		channels: make(map[string]*channel),
+		channels: make(map[string]*Channel),
+		broadcast: make(chan *Message),
 		callbacks: make(map[string]HandlerFunc),
+		addConn: make(chan *Conn),
+		delConn: make(chan *Conn),
 		done: make(chan bool, 1),
+		shutdown: false,
 	}
 }
 
-// CreateAndRun instantly create and run websocket server
-func CreateAndRun() *Server {
-	srv := Create()
-	srv.Run()
-
-	return srv
+// CreateAndRun instantly create and run websocket server.
+func CreateAndRun () *Server {
+	s := Create()
+	s.Run()
+	return s
 }
 
-// Run starting goroutines with broadcaster loop
-func (s *Server) Run() {
-	go s.Broadcast()
-}
-
-// Handler get upgrade connection to RFC 6455 and starting listener for it
-func (s *Server) Handler (w http.ResponseWriter, r *http.Request) {
-	con, _, _, err := ws.UpgradeHTTP(r, w)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("connection cannot be upgraded to websocket"))
-		return
-	}
-	defer con.Close()
-
-	connection, err := NewConn(con)
-
-	s.mu.Lock()
-	s.connections[connection] = true
-	s.mu.Unlock()
-
-	if !reflect.ValueOf(s.onConnect).IsNil() {
-		s.onConnect(connection)
-	}
-
-	s.listener(connection)
-}
-
-// Set function which will be called when new connections come
-func (s *Server) OnConnect (f func(c *Conn)) {
-	s.mu.Lock()
-	s.onConnect = f
-	s.mu.Unlock()
-}
-
-// Adding callback for specific message name
-func (s *Server) On (name string, f HandlerFunc) {
-	s.mu.Lock()
-	s.callbacks[name] = f
-	s.mu.Unlock()
-}
-
-// Sending message to all connections.
-// For sending message to specific connection use Conn.Emit()
-func (s *Server) Emit (name string, body interface{}) {
-	s.broadcast <- &Message{
-		Name: name,
-		Body: fmt.Sprintf("%v", body),
-	}
-}
-
-// Broadcast forever loop which waiting for new message on broadcast channel
-// if new message pushed to channel it will be send to connection
-// also waiting for done event
-func (s *Server) Broadcast() error {
-	for {
-		select {
-		case <- s.done:
-			return nil
-		default:
-			msg := <- s.broadcast
-			for c := range s.connections {
-				b, err := json.Marshal(msg)
-				if err != nil {
-					s.closeConnection(c, ws.StatusInternalServerError, err.Error())
+// Run start go routine which listening for channels.
+func (s *Server) Run () {
+	go func() {
+		for {
+			select {
+			case <- s.done:
+				s.shutdown = true
+				break
+			case msg := <- s.broadcast:
+				go func() {
+					for c := range s.connections{
+						c.Emit(msg.Name, msg.Body)
+					}
+				}()
+			case conn := <- s.addConn:
+				if !reflect.ValueOf(s.onConnect).IsNil() {
+					go s.onConnect(conn)
 				}
-				err = wsutil.WriteServerMessage(c.conn, ws.OpText, b)
-				if err != nil {
-					s.closeConnection(c, ws.StatusInternalServerError, err.Error())
+				s.connections[conn] = true
+			case conn := <- s.delConn:
+				if !reflect.ValueOf(s.onDisconnect).IsNil() {
+					go s.onDisconnect(conn)
 				}
+				go func() {
+					for _, dC := range s.delChan{
+						dC <- conn
+					}
+				}()
+				delete(s.connections, conn)
 			}
 		}
-	}
-	return nil
+	}()
 }
 
 // Shutdown must be called before application died
 // its goes throw all connection and closing it
-// and stopping goroutines with broadcaster loop
-func (s *Server) Shutdown() error {
+// and stopping all goroutines.
+func (s *Server) Shutdown () error {
 	l := len(s.connections)
 	var wg sync.WaitGroup
 	wg.Add(l)
 
 	for c := range s.connections {
 		go func(c *Conn) {
-			s.closeConnection(c, ws.StatusNormalClosure, "")
+			c.Close()
 			wg.Done()
 		}(c)
 	}
 
 	wg.Wait()
-	s.done <- true
 
+	s.done <- true
+	time.Sleep(100000 * time.Nanosecond)
 	return nil
 }
 
-// NewChannel will create new channel with specific name.
-// Return error if something goes wrong.
-// Channel must have unique name!
-func (s *Server) NewChannel (name string) (*channel, error) {
-	if s.channels[name] != nil {
-		return nil, errors.New(fmt.Sprintf("websocket: channel with name %s, already exist", name))
+// Handler get upgrade connection to RFC 6455 and starting listener for it.
+func (s *Server) Handler (w http.ResponseWriter, r *http.Request) {
+	if s.shutdown {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("websocket: server not started"))
+		return
 	}
 
-	c, err := CreateChannel(name)
-	if err != nil {
-		return nil, err
+	con, _, _, _ := ws.UpgradeHTTP(r, w)
+	defer con.Close()
+
+	connection := NewConn(con)
+	s.addConn <- connection
+
+	state := ws.StateServerSide
+
+	textPending := false
+	utf8Reader := wsutil.NewUTF8Reader(nil)
+	cipherReader := wsutil.NewCipherReader(nil, [4]byte{0, 0, 0, 0})
+
+	for {
+		header, err := ws.ReadHeader(con)
+		if err = ws.CheckHeader(header, state); err != nil {
+			s.delConn <- connection
+			return
+		}
+
+		cipherReader.Reset(io.LimitReader(con, header.Length), header.Mask, )
+
+		var utf8Fin bool
+		var r io.Reader = cipherReader
+
+		switch header.OpCode {
+		case ws.OpContinuation:
+			if textPending {
+				utf8Reader.Source = cipherReader
+				r = utf8Reader
+			}
+			if header.Fin {
+				state = state.Clear(ws.StateFragmented)
+				textPending = false
+				utf8Fin = true
+			}
+		case ws.OpText:
+			utf8Reader.Reset(cipherReader)
+			r = utf8Reader
+
+			if !header.Fin {
+				state = state.Set(ws.StateFragmented)
+				textPending = true
+			} else {
+				utf8Fin = true
+			}
+
+		case ws.OpBinary:
+			if !header.Fin {
+				state = state.Set(ws.StateFragmented)
+			}
+		case ws.OpPing:
+			connection.Pong()
+			continue
+		case ws.OpPong:
+			connection.Ping()
+			continue
+		case ws.OpClose:
+			s.delConn <- connection
+			return
+		}
+
+		payload := make([]byte, header.Length)
+		_, err = io.ReadFull(r, payload)
+		if err == nil && utf8Fin && !utf8Reader.Valid() {
+			err = wsutil.ErrInvalidUTF8
+		}
+
+		if err != nil {
+			s.delConn <- connection
+			return
+		}
+
+		s.processMessage(connection, payload)
 	}
-
-	s.mu.Lock()
-	s.channels[name] = c
-	s.mu.Unlock()
-
-	return c, nil
 }
 
-// Count return number of active connections
+// On adding callback for message.
+func (s *Server) On (name string, f HandlerFunc) {
+	s.callbacks[name] = f
+}
+
+// NewChannel create new channel and proxy channel delConn
+// for handling connection closing.
+func (s *Server) NewChannel (name string) *Channel {
+	c := newChannel(name)
+	s.delChan = append(s.delChan, c.delConn)
+	return c
+}
+
+// Set function which will be called when new connections come.
+func (s *Server) OnConnect (f func(c *Conn)) {
+	s.onConnect = f
+}
+
+// Set function which will be called when new connections come.
+func (s *Server) OnDisconnect (f func(c *Conn)) {
+	s.onDisconnect = f
+}
+
+// Emit emit message to all connections.
+func (s *Server) Emit (name string, body []byte) {
+	msg := Message{
+		Name: name,
+		Body: body,
+	}
+	s.broadcast <- &msg
+}
+
+// Count return number of active connections.
 func (s *Server) Count () int {
 	return len(s.connections)
 }
 
-func (s *Server) listener (c *Conn) {
-	for {
-		b, op, err := wsutil.ReadClientData(c.conn)
-		log.Print(op)
-
-		if err != nil {
-			s.mu.Lock()
-			delete(s.connections, c)
-			s.mu.Unlock()
-			break
-		}
-
-		switch op {
-		case ws.OpContinuation:
-			continue
-		case ws.OpText:
-			if !utf8.Valid(b) {
-				s.closeConnection(c, ws.StatusUnsupportedData, "Unsupported Data")
-				return
-			}
-			s.processMessage(c, b)
-		case ws.OpBinary:
-			s.closeConnection(c, ws.StatusUnsupportedData, "Unsupported Data")
-		case ws.OpClose:
-			s.closeConnection(c, ws.StatusNormalClosure, "")
-		case ws.OpPing:
-			c.Pong()
-		case ws.OpPong:
-			c.Ping()
-		}
-	}
-}
-
-func (s *Server) processMessage (c *Conn, b []byte) {
+func (s *Server) processMessage (c *Conn, b []byte) error {
 	var msg Message
 	err := json.Unmarshal(b, &msg)
 	if err != nil {
-		log.Printf("websocket: wrong message structure: %+v", err)
-		return
+		return err
 	}
 
 	if s.callbacks[msg.Name] != nil {
 		s.callbacks[msg.Name](c, &msg)
-		return
 	}
-
-	s.notFound(c, &msg)
-}
-
-func (s *Server) closeConnection (c *Conn, code ws.StatusCode, reason string) error {
-	c.CloseWithStatus(code, reason)
-
-	if !s.connections[c] {
-		return errors.New("websocket: unable to find connection")
-	}
-
-	s.mu.Lock()
-	delete(s.connections, c)
-	s.mu.Unlock()
 
 	return nil
-}
-
-func (s *Server) notFound(c *Conn, msg *Message) {
-	c.Emit("not found", msg.Body)
 }

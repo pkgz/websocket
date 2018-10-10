@@ -1,90 +1,67 @@
 package websocket
 
 import (
-	"fmt"
-	"github.com/pkg/errors"
 	"sync"
 )
 
 type Channel struct {
-	id 				string
-	connections 	map[*Conn]bool
+	id 						string
+	connections 			map[*Conn]bool
+	delConn					chan *Conn
 
-	closed			bool
-	mu				sync.Mutex
+	mu						sync.Mutex
 }
 
-// Emit emits message to all connections
-func CreateChannel (name string) (*Channel, error) {
-	return &Channel{
-		id: name,
+func newChannel (id string) *Channel {
+	c := Channel{
+		id: id,
 		connections: make(map[*Conn]bool),
-	}, nil
-}
-
-// Add add connection to channel
-func (c *Channel) Add (conn *Conn) error {
-	if c.closed {
-		return errors.New(fmt.Sprintf("websocket: trying to add connection to closed group %s", c.Id()))
-	}
-	conn.Join(c)
-
-	c.mu.Lock()
-	c.connections[conn] = true
-	c.mu.Unlock()
-
-	return nil
-}
-
-// Remove remove connection from channel
-func (c *Channel) Remove (conn *Conn) error {
-	if c.closed {
-		return errors.New(fmt.Sprintf("websocket: trying to leave group %s, which is already deleted", c.Id()))
-	}
-	conn.Leave(c)
-
-	if !c.connections[conn] {
-		return errors.New("websocket: connection not find in this channel")
+		delConn: make(chan *Conn),
 	}
 
-	c.mu.Lock()
-	delete(c.connections, conn)
-	c.mu.Unlock()
+	go func() {
+		for {
+			select {
+			case conn := <- c.delConn:
+				delete(c.connections, conn)
+			}
+		}
+	}()
 
-	return nil
+	return &c
 }
 
-// Id return channel name which is id
+// Count return number of connections in channel.
+func (c *Channel) Count () int {
+	return len(c.connections)
+}
+
+// Id return channel id.
 func (c *Channel) Id () string {
 	return c.id
 }
 
-// Emit emits message to all connections
-func (c *Channel) Emit (name string, message interface{}) error {
-	if c.closed {
-		return errors.New(fmt.Sprintf("websocket: trying to emit message in deleted group %s", c.Id()))
-	}
-
-	for conn := range c.connections {
-		conn.Emit(name, message)
-	}
-
-	return nil
+// Add add connection to channel.
+func (c *Channel) Add (conn *Conn) {
+	c.mu.Lock()
+	c.connections[conn] = true
+	c.mu.Unlock()
 }
 
-// Delete delete channel and remove all connections from it
-func (c *Channel) Delete () error {
-	if c.closed {
-		return errors.New(fmt.Sprintf("websocket: trying to delete group %s, which is already deleted", c.Id()))
-	}
-
-	for conn := range c.connections {
-		conn.Leave(c)
-	}
-
+// Remove remove connection from channel.
+func (c *Channel) Remove (conn *Conn) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.closed = true
+	delete(c.connections, conn)
+	c.mu.Unlock()
+}
+
+// Emit emits message to all connections in channel.
+func (c *Channel) Emit (name string, body []byte) error {
+	for con := range c.connections {
+		go func(con *Conn) {
+			con.Emit(name, body)
+		}(con)
+	}
 
 	return nil
 }
