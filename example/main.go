@@ -28,7 +28,7 @@ func main () {
 
 	server.OnConnect(func(c *websocket.Conn) {
 		ch.Add(c)
-		ch.Emit(&websocket.Message{Name: "test", Body: fmt.Sprintf("Hello World to %d connections", ch.Count())})
+		ch.Emit("test", []byte(fmt.Sprintf("Hello World to %d connections", ch.Count())))
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())

@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
+	"log"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -16,7 +17,6 @@ import (
 )
 
 var addr = flag.String("addr", "localhost:8080", "http service address")
-
 
 func TestServer_Run(t *testing.T) {
 	server, wsServer, ctx := createWS()
@@ -72,11 +72,11 @@ func TestServer_OnConnect(t *testing.T) {
 
 	msg := Message{
 		Name: "TesT",
-		Body: "Hello World",
+		Body: []byte("Hello World"),
 	}
 
 	wsServer.OnConnect(func(c *Conn) {
-		c.Emit(&msg)
+		c.Emit(msg.Name, msg.Body)
 	})
 
 	u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
@@ -129,12 +129,12 @@ func TestServer_OnDisconnect(t *testing.T) {
 
 	msg := Message{
 		Name: "TesT",
-		Body: "Hello World",
+		Body: []byte("Hello World"),
 	}
 
 	wsServer.OnDisconnect(func(c *Conn) {
 		done <- true
-		err := c.Emit(&msg)
+		err := c.Emit(msg.Name, msg.Body)
 		require.Error(t, err, "server must return error with closed connection")
 		require.Equal(t, 0, wsServer.Count(), "server must have 0 connections")
 	})
@@ -156,6 +156,101 @@ func TestServer_OnDisconnect(t *testing.T) {
 	server.Shutdown(ctx)
 }
 
+func TestServer_On(t *testing.T) {
+	server, wsServer, ctx := createWS()
+
+	message := Message{
+		Name: "LoL",
+		Body: []byte("Hello World"),
+	}
+
+	wsServer.On("LoL", func(c *Conn, msg *Message) {
+		require.Equal(t, message, msg, "received message must be the same as send")
+		log.Print(msg)
+	})
+
+	u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
+	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	if err != nil {
+		t.Fatal("dial:", err)
+	}
+	defer c.Close()
+
+	c.WriteJSON(message)
+
+	wsServer.Shutdown()
+	server.Shutdown(ctx)
+}
+
+func TestServer_NewChannel(t *testing.T) {
+	server, wsServer, ctx := createWS()
+
+	ch := wsServer.NewChannel("test")
+	require.NotNil(t, ch, "must be channel")
+
+	var typ *Channel
+	require.IsType(t, typ, ch, "must be Channel type")
+
+	wsServer.Shutdown()
+	server.Shutdown(ctx)
+}
+
+func TestServer_Emit(t *testing.T) {
+	server, wsServer, ctx := createWS()
+
+	msg := Message{
+		Name: "test",
+		Body: []byte("Hello from emit test"),
+	}
+
+	u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
+	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	if err != nil {
+		t.Fatal("dial:", err)
+	}
+	defer c.Close()
+
+	wsServer.Emit(msg.Name, msg.Body)
+
+
+	for {
+		_, b, _ := c.ReadMessage()
+		var res Message
+		err := json.Unmarshal(b, &res)
+		require.Nil(t, err, "error must be nil")
+		require.Equal(t, msg, res, "response message must be the same as send (byte array)")
+		break
+	}
+
+	wsServer.Shutdown()
+	server.Shutdown(ctx)
+}
+
+func TestServerListen(t *testing.T) {
+	server, wsServer, ctx := createWS()
+
+	u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
+	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	require.NoError(t, err, "connection must be established without error")
+	defer c.Close()
+
+	done := make(chan bool, 1)
+	message := Message{
+		Name: "echo",
+		Body: []byte("Hello from echo"),
+	}
+	wsServer.On("echo", func(c *Conn, msg *Message) {
+		require.Equal(t, message, *msg, "response message must be the same as send (byte array)")
+		done <- true
+	})
+	c.WriteJSON(message)
+	<- done
+
+
+	wsServer.Shutdown()
+	server.Shutdown(ctx)
+}
+
 func TestProcessMessage(t *testing.T) {
 	server, wsServer, ctx := createWS()
 
@@ -165,7 +260,7 @@ func TestProcessMessage(t *testing.T) {
 	err = wsServer.processMessage(nil, []byte(""))
 	require.Error(t, err, "unexpected end of JSON input")
 
-	m := Message{Name: "1", Body: "2"}
+	m := Message{Name: "1", Body: []byte("2")}
 	b, err := json.Marshal(m)
 	err = wsServer.processMessage(nil, b)
 	require.Nil(t, err, "must normally process message")

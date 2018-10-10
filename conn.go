@@ -20,40 +20,36 @@ func NewConn (conn net.Conn) *Conn {
 	}
 }
 
-// Conn return net.Conn of connection
-func (c *Conn) Conn () net.Conn {
-	return c.conn
-}
-
-// Emit emit message to connection
-func (c *Conn) Emit (msg *Message) error {
-	b, err := json.Marshal(msg)
-	if err != nil {
-		return err
+// Emit emit message to connection.
+func (c *Conn) Emit (name string, body []byte) error {
+	msg := Message{
+		Name: name,
+		Body: body,
 	}
-	err = wsutil.WriteServerMessage(c.conn, ws.OpText, b)
-	return err
+	b, _ := json.Marshal(msg)
+
+	return c.Write(b)
 }
 
-// Write write byte array to connection
+// Write write byte array to connection.
 func (c *Conn) Write (b []byte) error {
 	err := wsutil.WriteServerMessage(c.conn, ws.OpText, b)
 	return err
 }
 
-// Ping handler for pong request
+// Ping handler for pong request.
 func (c *Conn) Ping () error {
-	err := wsutil.WriteServerMessage(c.conn, ws.OpPing, []byte("ping"))
+	err := wsutil.WriteServerMessage(c.conn, ws.OpPing, nil)
 	return err
 }
 
-// Pong handler for ping request
+// Pong handler for ping request.
 func (c *Conn) Pong () error {
-	err := wsutil.WriteServerMessage(c.conn, ws.OpPong, []byte("pong"))
+	err := wsutil.WriteServerMessage(c.conn, ws.OpPong, nil)
 	return err
 }
 
-// Close closing websocket connection
+// Close closing websocket connection.
 func (c *Conn) Close () error {
 	err := c.conn.Close()
 	return err

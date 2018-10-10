@@ -1,16 +1,12 @@
 package websocket
 
 import (
-	"encoding/json"
 	"sync"
-	"time"
 )
 
 type Channel struct {
 	id 						string
 	connections 			map[*Conn]bool
-
-	addConn					chan *Conn
 	delConn					chan *Conn
 
 	mu						sync.Mutex
@@ -20,15 +16,12 @@ func newChannel (id string) *Channel {
 	c := Channel{
 		id: id,
 		connections: make(map[*Conn]bool),
-		addConn: make(chan *Conn),
 		delConn: make(chan *Conn),
 	}
 
 	go func() {
 		for {
 			select {
-			case conn := <- c.addConn:
-				c.connections[conn] = true
 			case conn := <- c.delConn:
 				delete(c.connections, conn)
 			}
@@ -50,25 +43,23 @@ func (c *Channel) Id () string {
 
 // Add add connection to channel.
 func (c *Channel) Add (conn *Conn) {
-	c.addConn <- conn
-	time.Sleep(100000 * time.Nanosecond)
+	c.mu.Lock()
+	c.connections[conn] = true
+	c.mu.Unlock()
 }
 
 // Remove remove connection from channel.
 func (c *Channel) Remove (conn *Conn) {
-	c.delConn <- conn
+	c.mu.Lock()
+	delete(c.connections, conn)
+	c.mu.Unlock()
 }
 
 // Emit emits message to all connections in channel.
-func (c *Channel) Emit (msg *Message) error {
-	b, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
-
+func (c *Channel) Emit (name string, body []byte) error {
 	for con := range c.connections {
 		go func(con *Conn) {
-			con.Write(b)
+			con.Emit(name, body)
 		}(con)
 	}
 
