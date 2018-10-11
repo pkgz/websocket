@@ -1,6 +1,7 @@
 .DS_Store
 .idea
-vendor
 coverage.out
 config
 reports
+Gopkg.lock
+Gopkg.toml
