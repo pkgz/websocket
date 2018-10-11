@@ -4,25 +4,26 @@ import (
 	"sync"
 )
 
+// Channel represent group of connections (similar to group in socket.io).
 type Channel struct {
-	id 						string
-	connections 			map[*Conn]bool
-	delConn					chan *Conn
+	id          string
+	connections map[*Conn]bool
+	delConn     chan *Conn
 
-	mu						sync.Mutex
+	mu sync.Mutex
 }
 
-func newChannel (id string) *Channel {
+func newChannel(id string) *Channel {
 	c := Channel{
-		id: id,
+		id:          id,
 		connections: make(map[*Conn]bool),
-		delConn: make(chan *Conn),
+		delConn:     make(chan *Conn),
 	}
 
 	go func() {
 		for {
 			select {
-			case conn := <- c.delConn:
+			case conn := <-c.delConn:
 				delete(c.connections, conn)
 			}
 		}
@@ -32,31 +33,31 @@ func newChannel (id string) *Channel {
 }
 
 // Count return number of connections in channel.
-func (c *Channel) Count () int {
+func (c *Channel) Count() int {
 	return len(c.connections)
 }
 
-// Id return channel id.
-func (c *Channel) Id () string {
+// ID return channel id.
+func (c *Channel) ID() string {
 	return c.id
 }
 
 // Add add connection to channel.
-func (c *Channel) Add (conn *Conn) {
+func (c *Channel) Add(conn *Conn) {
 	c.mu.Lock()
 	c.connections[conn] = true
 	c.mu.Unlock()
 }
 
 // Remove remove connection from channel.
-func (c *Channel) Remove (conn *Conn) {
+func (c *Channel) Remove(conn *Conn) {
 	c.mu.Lock()
 	delete(c.connections, conn)
 	c.mu.Unlock()
 }
 
 // Emit emits message to all connections in channel.
-func (c *Channel) Emit (name string, body []byte) error {
+func (c *Channel) Emit(name string, body []byte) error {
 	for con := range c.connections {
 		go func(con *Conn) {
 			con.Emit(name, body)

@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-var addr = flag.String("addr", "localhost:8080", "http service address")
+var addr = flag.String("addr", "127.0.0.1:8080", "http service address")
 
 func TestServer_Run(t *testing.T) {
 	server, wsServer, ctx := createWS()
@@ -27,6 +27,8 @@ func TestServer_Run(t *testing.T) {
 		t.Fatal("dial:", err)
 	}
 	defer c.Close()
+
+	time.Sleep(1 * time.Millisecond) // Give some time to add connection
 
 	require.Equal(t, 1, wsServer.Count(), "weboscket must contain only 1 connection")
 
@@ -51,7 +53,7 @@ func TestServer_Count(t *testing.T) {
 	server, wsServer, ctx := createWS()
 
 	rand.Seed(time.Now().Unix())
-	number := rand.Intn(14 - 3) + 3
+	number := rand.Intn(14-3) + 3
 
 	for i := 1; i <= number; i++ {
 		u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
@@ -61,6 +63,7 @@ func TestServer_Count(t *testing.T) {
 		}
 	}
 
+	time.Sleep(1 * time.Millisecond) // Give some time to add connection
 	require.Equal(t, number, wsServer.Count(), fmt.Sprintf("weboscket must contain only %d connection", number))
 
 	wsServer.Shutdown()
@@ -103,7 +106,7 @@ func TestServer_OnConnect2(t *testing.T) {
 	msg := []byte("Hello from byte array")
 	h := ws.Header{
 		OpCode: ws.OpText,
-		Fin: true,
+		Fin:    true,
 		Length: int64(len(msg)),
 	}
 
@@ -152,8 +155,8 @@ func TestServer_OnDisconnect(t *testing.T) {
 	defer c.Close()
 
 	for {
-		c.WriteControl(8, nil, time.Now().Add(30 * time.Second))
-		<- done
+		c.WriteControl(8, nil, time.Now().Add(30*time.Second))
+		<-done
 		break
 	}
 
@@ -181,7 +184,7 @@ func TestServer_OnMessage(t *testing.T) {
 
 	c.WriteMessage(1, msg)
 
-	<- done
+	<-done
 
 	wsServer.Shutdown()
 	server.Shutdown(ctx)
@@ -211,7 +214,7 @@ func TestServer_On(t *testing.T) {
 
 	c.WriteJSON(message)
 
-	<- done
+	<-done
 
 	wsServer.Shutdown()
 	server.Shutdown(ctx)
@@ -247,7 +250,6 @@ func TestServer_Emit(t *testing.T) {
 
 	wsServer.Emit(msg.Name, msg.Body)
 
-
 	for {
 		_, b, _ := c.ReadMessage()
 		var res Message
@@ -279,8 +281,7 @@ func TestServerListen(t *testing.T) {
 		done <- true
 	})
 	c.WriteJSON(message)
-	<- done
-
+	<-done
 
 	wsServer.Shutdown()
 	server.Shutdown(ctx)
@@ -310,7 +311,7 @@ func TestServerNotFound(t *testing.T) {
 	server.Shutdown(ctx)
 }
 
-func createWS () (*http.Server, *Server, context.Context) {
+func createWS() (*http.Server, *Server, context.Context) {
 	var srv *http.Server
 
 	r := chi.NewRouter()
@@ -318,15 +319,17 @@ func createWS () (*http.Server, *Server, context.Context) {
 
 	r.Get("/ws", server.Handler)
 
-	ctx, _ := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
 	srv = &http.Server{
-		Addr: ":8080",
+		Addr:    ":8080",
 		Handler: r,
 	}
 
 	go func() {
 		srv.ListenAndServe()
+		cancel()
 	}()
 
+	time.Sleep(100 * time.Millisecond) // give time to server wake up
 	return srv, server, ctx
 }

@@ -7,20 +7,22 @@ import (
 	"net"
 )
 
+// Conn websocket connection
 type Conn struct {
-	id 		string
-	conn 	net.Conn
+	id   string
+	conn net.Conn
 }
 
-func NewConn (conn net.Conn) *Conn {
+// NewConn create internal websocket object
+func NewConn(conn net.Conn) *Conn {
 	return &Conn{
-		id: betterguid.New(),
+		id:   betterguid.New(),
 		conn: conn,
 	}
 }
 
 // Emit emit message to connection.
-func (c *Conn) Emit (name string, body []byte) error {
+func (c *Conn) Emit(name string, body []byte) error {
 	msg := Message{
 		Name: name,
 		Body: body,
@@ -28,7 +30,7 @@ func (c *Conn) Emit (name string, body []byte) error {
 	b, _ := json.Marshal(msg)
 
 	h := ws.Header{
-		Fin: true,
+		Fin:    true,
 		OpCode: ws.OpText,
 		Masked: false,
 		Length: int64(len(b)),
@@ -38,18 +40,18 @@ func (c *Conn) Emit (name string, body []byte) error {
 }
 
 // Write write byte array to connection.
-func (c *Conn) Write (h ws.Header, b []byte) error {
+func (c *Conn) Write(h ws.Header, b []byte) error {
 	ws.WriteHeader(c.conn, h)
 	_, err := c.conn.Write(b)
 	return err
 }
 
 // Ping handler for pong request.
-func (c *Conn) Ping (b []byte) error {
+func (c *Conn) Ping(b []byte) error {
 	h := ws.Header{
-		Fin: true,
+		Fin:    true,
 		OpCode: ws.OpPing,
-		Masked: false,
+		Masked: true,
 		Length: int64(len(b)),
 	}
 	err := c.Write(h, b)
@@ -57,11 +59,11 @@ func (c *Conn) Ping (b []byte) error {
 }
 
 // Pong handler for ping request.
-func (c *Conn) Pong (b []byte) error {
+func (c *Conn) Pong(b []byte) error {
 	h := ws.Header{
-		Fin: true,
+		Fin:    true,
 		OpCode: ws.OpPong,
-		Masked: false,
+		Masked: true,
 		Length: int64(len(b)),
 	}
 	err := c.Write(h, b)
@@ -69,7 +71,7 @@ func (c *Conn) Pong (b []byte) error {
 }
 
 // Close closing websocket connection.
-func (c *Conn) Close () error {
+func (c *Conn) Close() error {
 	err := c.conn.Close()
 	return err
 }
