@@ -5,6 +5,9 @@ go:
 
 install: true
 
+before_script:
+  - go get -d ./...
+
 script:
   - go test -coverprofile=coverage.txt -covermode=atomic
 
