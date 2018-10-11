@@ -8,15 +8,15 @@ import (
 
 func main () {
 	r := chi.NewRouter()
-	ws := websocket.CreateAndRun()
+	wsServer := websocket.CreateAndRun()
 
-	ch := ws.NewChannel("test")
+	ch := wsServer.NewChannel("test")
 
-	ws.OnConnect(func(c *websocket.Conn) {
+	wsServer.OnConnect(func(c *websocket.Conn) {
 		ch.Add(c)
 		ch.Emit("connection", []byte("new connection come"))
 	})
 
-	r.Get("/ws", ws.Handler)
+	r.Get("/ws", wsServer.Handler)
 	http.ListenAndServe(":8080", r)
 }

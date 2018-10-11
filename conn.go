@@ -3,7 +3,6 @@ package websocket
 import (
 	"encoding/json"
 	"github.com/gobwas/ws"
-	"github.com/gobwas/ws/wsutil"
 	"github.com/kjk/betterguid"
 	"net"
 )
@@ -28,24 +27,44 @@ func (c *Conn) Emit (name string, body []byte) error {
 	}
 	b, _ := json.Marshal(msg)
 
-	return c.Write(b)
+	h := ws.Header{
+		Fin: true,
+		OpCode: ws.OpText,
+		Masked: false,
+		Length: int64(len(b)),
+	}
+
+	return c.Write(h, b)
 }
 
 // Write write byte array to connection.
-func (c *Conn) Write (b []byte) error {
-	err := wsutil.WriteServerMessage(c.conn, ws.OpText, b)
+func (c *Conn) Write (h ws.Header, b []byte) error {
+	ws.WriteHeader(c.conn, h)
+	_, err := c.conn.Write(b)
 	return err
 }
 
 // Ping handler for pong request.
-func (c *Conn) Ping () error {
-	err := wsutil.WriteServerMessage(c.conn, ws.OpPing, nil)
+func (c *Conn) Ping (b []byte) error {
+	h := ws.Header{
+		Fin: true,
+		OpCode: ws.OpPing,
+		Masked: false,
+		Length: int64(len(b)),
+	}
+	err := c.Write(h, b)
 	return err
 }
 
 // Pong handler for ping request.
-func (c *Conn) Pong () error {
-	err := wsutil.WriteServerMessage(c.conn, ws.OpPong, nil)
+func (c *Conn) Pong (b []byte) error {
+	h := ws.Header{
+		Fin: true,
+		OpCode: ws.OpPong,
+		Masked: false,
+		Length: int64(len(b)),
+	}
+	err := c.Write(h, b)
 	return err
 }
 
