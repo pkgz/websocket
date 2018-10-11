@@ -1,0 +1,14 @@
+required = ["github.com/gobwas/ws"]
+
+ignored = [
+  "github.com/gorilla/websocket",
+  "github.com/stretchr/testify",
+  "github.com/go-chi/chi"
+]
+
+[[constraint]]
+  name = "github.com/gobwas/ws"
+  version = "1.0.0"
+
+[prune]
+  unused-packages = true

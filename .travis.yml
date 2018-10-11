@@ -6,7 +6,9 @@ go:
 install: true
 
 before_script:
-  - go get -d ./...
+  - go get github.com/go-chi/chi
+  - go get github.com/gorilla/websocket
+  - go get github.com/stretchr/testify
 
 script:
   - go test -coverprofile=coverage.txt -covermode=atomic
