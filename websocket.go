@@ -6,6 +6,7 @@ import (
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"io"
+	"log"
 	"net/http"
 	"reflect"
 	"sync"
@@ -26,9 +27,12 @@ type Server struct {
 
 	onConnect		func (c *Conn)
 	onDisconnect	func (c *Conn)
+	onMessage		func (c *Conn, h ws.Header, b []byte)
 
 	shutdown		bool
 	done 			chan bool
+
+	mu				sync.Mutex
 }
 
 // Message is a struct for data which sending between application and clients.
@@ -47,7 +51,7 @@ type HandlerFunc func (c *Conn, msg *Message)
 
 // Create a new websocket server handler with the provided options.
 func Create () *Server {
-	return &Server{
+	srv := &Server{
 		connections: make(map[*Conn]bool),
 		channels: make(map[string]*Channel),
 		broadcast: make(chan *Message),
@@ -57,6 +61,10 @@ func Create () *Server {
 		done: make(chan bool, 1),
 		shutdown: false,
 	}
+	srv.onMessage = func(c *Conn, h ws.Header, b []byte) {
+		c.Write(h, b)
+	}
+	return srv
 }
 
 // CreateAndRun instantly create and run websocket server.
@@ -130,31 +138,43 @@ func (s *Server) Handler (w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	con, _, _, _ := ws.UpgradeHTTP(r, w)
-	defer con.Close()
+	conn, _, _, _ := ws.UpgradeHTTP(r, w)
+	defer conn.Close()
 
-	connection := NewConn(con)
+	connection := NewConn(conn)
 	s.addConn <- connection
 
-	state := ws.StateServerSide
-
 	textPending := false
+
+	state := ws.StateServerSide
 	utf8Reader := wsutil.NewUTF8Reader(nil)
 	cipherReader := wsutil.NewCipherReader(nil, [4]byte{0, 0, 0, 0})
 
 	for {
-		header, err := ws.ReadHeader(con)
+		header, err := ws.ReadHeader(conn)
 		if err = ws.CheckHeader(header, state); err != nil {
 			s.delConn <- connection
 			return
 		}
 
-		cipherReader.Reset(io.LimitReader(con, header.Length), header.Mask, )
+		cipherReader.Reset(io.LimitReader(conn, header.Length), header.Mask)
 
 		var utf8Fin bool
 		var r io.Reader = cipherReader
 
 		switch header.OpCode {
+		case ws.OpPing:
+			b := make([]byte, header.Length)
+			_, err = io.ReadFull(r, b)
+			connection.Pong(b)
+			continue
+		case ws.OpPong:
+			b := make([]byte, header.Length)
+			_, err = io.ReadFull(r, b)
+			connection.Ping(b)
+			continue
+		case ws.OpClose:
+			utf8Fin = true
 		case ws.OpContinuation:
 			if textPending {
 				utf8Reader.Source = cipherReader
@@ -175,20 +195,10 @@ func (s *Server) Handler (w http.ResponseWriter, r *http.Request) {
 			} else {
 				utf8Fin = true
 			}
-
 		case ws.OpBinary:
 			if !header.Fin {
 				state = state.Set(ws.StateFragmented)
 			}
-		case ws.OpPing:
-			connection.Pong()
-			continue
-		case ws.OpPong:
-			connection.Ping()
-			continue
-		case ws.OpClose:
-			s.delConn <- connection
-			return
 		}
 
 		payload := make([]byte, header.Length)
@@ -197,36 +207,57 @@ func (s *Server) Handler (w http.ResponseWriter, r *http.Request) {
 			err = wsutil.ErrInvalidUTF8
 		}
 
-		if err != nil {
+		if err != nil || header.OpCode == ws.OpClose {
 			s.delConn <- connection
 			return
 		}
 
-		s.processMessage(connection, payload)
+		header.Masked = false
+		err = s.processMessage(connection, header, payload)
+		if err != nil {
+			log.Print(err)
+			s.delConn <- connection
+			return
+		}
 	}
 }
 
 // On adding callback for message.
 func (s *Server) On (name string, f HandlerFunc) {
+	s.mu.Lock()
 	s.callbacks[name] = f
+	s.mu.Unlock()
 }
 
 // NewChannel create new channel and proxy channel delConn
 // for handling connection closing.
 func (s *Server) NewChannel (name string) *Channel {
 	c := newChannel(name)
+	s.mu.Lock()
 	s.delChan = append(s.delChan, c.delConn)
+	s.mu.Unlock()
 	return c
 }
 
 // Set function which will be called when new connections come.
 func (s *Server) OnConnect (f func(c *Conn)) {
+	s.mu.Lock()
 	s.onConnect = f
+	s.mu.Unlock()
 }
 
 // Set function which will be called when new connections come.
 func (s *Server) OnDisconnect (f func(c *Conn)) {
+	s.mu.Lock()
 	s.onDisconnect = f
+	s.mu.Unlock()
+}
+
+// OnMessage handling byte message. By default this function works as echo.
+func (s *Server) OnMessage (f func(c *Conn, h ws.Header, b []byte)) {
+	s.mu.Lock()
+	s.onMessage = f
+	s.mu.Unlock()
 }
 
 // Emit emit message to all connections.
@@ -243,15 +274,31 @@ func (s *Server) Count () int {
 	return len(s.connections)
 }
 
-func (s *Server) processMessage (c *Conn, b []byte) error {
+func (s *Server) processMessage (c *Conn, h ws.Header, b []byte) error {
 	var msg Message
-	err := json.Unmarshal(b, &msg)
-	if err != nil {
-		return err
+
+	if len(b) == 0 {
+		s.onMessage(c, h, b)
+		return nil
 	}
 
-	if s.callbacks[msg.Name] != nil {
-		s.callbacks[msg.Name](c, &msg)
+	switch h.OpCode {
+	case ws.OpBinary:
+		s.onMessage(c, h, b)
+	case ws.OpText:
+		switch b[0] {
+		case 123:
+			err := json.Unmarshal(b, &msg)
+			if err != nil {
+				return err
+			}
+			if s.callbacks[msg.Name] != nil {
+				s.callbacks[msg.Name](c, &msg)
+			}
+		default:
+			s.onMessage(c, h, b)
+			return nil
+		}
 	}
 
 	return nil

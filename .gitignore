@@ -2,3 +2,5 @@
 .idea
 vendor
 coverage.out
+config
+reports
