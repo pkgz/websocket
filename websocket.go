@@ -62,7 +62,7 @@ func Create() *Server {
 		shutdown:    false,
 	}
 	srv.onMessage = func(c *Conn, h ws.Header, b []byte) {
-		c.Write(h, b)
+		_ = c.Write(h, b)
 	}
 	return srv
 }
@@ -84,7 +84,7 @@ func (s *Server) Run() {
 			case msg := <-s.broadcast:
 				go func() {
 					for c := range s.connections {
-						c.Emit(msg.Name, msg.Body)
+						_ = c.Emit(msg.Name, msg.Body)
 					}
 				}()
 			case conn := <-s.addConn:
@@ -119,7 +119,7 @@ func (s *Server) Shutdown() error {
 
 	for c := range s.connections {
 		go func(c *Conn) {
-			c.Close()
+			_ = c.Close()
 			wg.Done()
 		}(c)
 	}
@@ -135,7 +135,7 @@ func (s *Server) Shutdown() error {
 func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 	if s.shutdown {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("websocket: server not started"))
+		_, _ = w.Write([]byte("websocket: server not started"))
 		return
 	}
 

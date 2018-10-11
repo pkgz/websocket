@@ -28,9 +28,9 @@ func TestConn_Ping(t *testing.T) {
 	ws.WriteHeader(c, h)
 	_, err = c.Write(m)
 
-	resp := make([]byte, mask + len(m))
+	resp := make([]byte, mask+len(m))
 	c.Read(resp)
-	require.Equal(t, m, resp[mask:mask+ len(m)], "response and request must be the same")
+	require.Equal(t, m, resp[mask:mask+len(m)], "response and request must be the same")
 
 	wsServer.Shutdown()
 	server.Shutdown(ctx)
@@ -57,9 +57,9 @@ func TestConn_Pong(t *testing.T) {
 	ws.WriteHeader(c, h)
 	_, err = c.Write(m)
 
-	resp := make([]byte, mask + len(m))
+	resp := make([]byte, mask+len(m))
 	c.Read(resp)
-	require.Equal(t, m, resp[mask:mask+ len(m)], "response and request must be the same")
+	require.Equal(t, m, resp[mask:mask+len(m)], "response and request must be the same")
 
 	wsServer.Shutdown()
 	server.Shutdown(ctx)
