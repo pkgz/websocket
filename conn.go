@@ -3,22 +3,12 @@ package websocket
 import (
 	"encoding/json"
 	"github.com/gobwas/ws"
-	"github.com/kjk/betterguid"
 	"net"
 )
 
 // Conn websocket connection
 type Conn struct {
-	id   string
 	conn net.Conn
-}
-
-// NewConn create internal websocket object
-func NewConn(conn net.Conn) *Conn {
-	return &Conn{
-		id:   betterguid.New(),
-		conn: conn,
-	}
 }
 
 // Emit emit message to connection.
