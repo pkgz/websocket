@@ -316,7 +316,7 @@ func createWS() (*http.Server, *Server, context.Context) {
 
 	r.Get("/ws", server.Handler)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, _ := context.WithCancel(context.Background())
 	srv = &http.Server{
 		Addr:    ":8080",
 		Handler: r,
@@ -324,7 +324,6 @@ func createWS() (*http.Server, *Server, context.Context) {
 
 	go func() {
 		srv.ListenAndServe()
-		cancel()
 	}()
 
 	return srv, server, ctx
