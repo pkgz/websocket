@@ -13,7 +13,7 @@ Simple websocket library for golang
 - lightweight and easy to use
 
 # Example
-## [Echo](https://github.com/exelban/websocket/blob/master/example/echo.go)
+## Echo
 ```golang
 package main
 
@@ -36,7 +36,7 @@ func main () {
 }
 ```
 
-## [Channel](https://github.com/exelban/websocket/blob/master/example/channel.go)
+## Channel
 ```golang
 package main
 
@@ -62,7 +62,7 @@ func main () {
 }
 ```
 
-## [HelloWorld](https://github.com/exelban/websocket/blob/master/example/helloWorld.go)
+## HelloWorld
 ```golang
 package main
 

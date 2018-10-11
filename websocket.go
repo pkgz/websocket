@@ -142,7 +142,9 @@ func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 	conn, _, _, _ := ws.UpgradeHTTP(r, w)
 	defer conn.Close()
 
-	connection := NewConn(conn)
+	connection := &Conn{
+		conn: conn,
+	}
 	s.addConn <- connection
 
 	textPending := false
