@@ -51,7 +51,7 @@ func (c *Conn) Ping(b []byte) error {
 	h := ws.Header{
 		Fin:    true,
 		OpCode: ws.OpPing,
-		Masked: false,
+		Masked: true,
 		Length: int64(len(b)),
 	}
 	err := c.Write(h, b)
@@ -63,7 +63,7 @@ func (c *Conn) Pong(b []byte) error {
 	h := ws.Header{
 		Fin:    true,
 		OpCode: ws.OpPong,
-		Masked: false,
+		Masked: true,
 		Length: int64(len(b)),
 	}
 	err := c.Write(h, b)

@@ -3,5 +3,3 @@
 coverage.out
 config
 reports
-Gopkg.lock
-Gopkg.toml

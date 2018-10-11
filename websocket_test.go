@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-var addr = flag.String("addr", "localhost:8080", "http service address")
+var addr = flag.String("addr", "127.0.0.1:8080", "http service address")
 
 func TestServer_Run(t *testing.T) {
 	server, wsServer, ctx := createWS()
@@ -27,6 +27,8 @@ func TestServer_Run(t *testing.T) {
 		t.Fatal("dial:", err)
 	}
 	defer c.Close()
+
+	time.Sleep(1 * time.Millisecond) // Give some time to add connection
 
 	require.Equal(t, 1, wsServer.Count(), "weboscket must contain only 1 connection")
 
@@ -61,6 +63,7 @@ func TestServer_Count(t *testing.T) {
 		}
 	}
 
+	time.Sleep(1 * time.Millisecond) // Give some time to add connection
 	require.Equal(t, number, wsServer.Count(), fmt.Sprintf("weboscket must contain only %d connection", number))
 
 	wsServer.Shutdown()
@@ -327,5 +330,6 @@ func createWS() (*http.Server, *Server, context.Context) {
 		cancel()
 	}()
 
+	time.Sleep(100 * time.Millisecond) // give time to server wake up
 	return srv, server, ctx
 }

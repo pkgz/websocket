@@ -80,7 +80,6 @@ func (s *Server) Run() {
 		for {
 			select {
 			case <-s.done:
-				s.shutdown = true
 				break
 			case msg := <-s.broadcast:
 				go func() {
@@ -112,6 +111,8 @@ func (s *Server) Run() {
 // its goes throw all connection and closing it
 // and stopping all goroutines.
 func (s *Server) Shutdown() error {
+	s.shutdown = true
+
 	l := len(s.connections)
 	var wg sync.WaitGroup
 	wg.Add(l)
