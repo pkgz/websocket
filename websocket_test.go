@@ -51,7 +51,7 @@ func TestServer_Count(t *testing.T) {
 	server, wsServer, ctx := createWS()
 
 	rand.Seed(time.Now().Unix())
-	number := rand.Intn(14 - 3) + 3
+	number := rand.Intn(14-3) + 3
 
 	for i := 1; i <= number; i++ {
 		u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
@@ -103,7 +103,7 @@ func TestServer_OnConnect2(t *testing.T) {
 	msg := []byte("Hello from byte array")
 	h := ws.Header{
 		OpCode: ws.OpText,
-		Fin: true,
+		Fin:    true,
 		Length: int64(len(msg)),
 	}
 
@@ -152,8 +152,8 @@ func TestServer_OnDisconnect(t *testing.T) {
 	defer c.Close()
 
 	for {
-		c.WriteControl(8, nil, time.Now().Add(30 * time.Second))
-		<- done
+		c.WriteControl(8, nil, time.Now().Add(30*time.Second))
+		<-done
 		break
 	}
 
@@ -181,7 +181,7 @@ func TestServer_OnMessage(t *testing.T) {
 
 	c.WriteMessage(1, msg)
 
-	<- done
+	<-done
 
 	wsServer.Shutdown()
 	server.Shutdown(ctx)
@@ -211,7 +211,7 @@ func TestServer_On(t *testing.T) {
 
 	c.WriteJSON(message)
 
-	<- done
+	<-done
 
 	wsServer.Shutdown()
 	server.Shutdown(ctx)
@@ -247,7 +247,6 @@ func TestServer_Emit(t *testing.T) {
 
 	wsServer.Emit(msg.Name, msg.Body)
 
-
 	for {
 		_, b, _ := c.ReadMessage()
 		var res Message
@@ -279,8 +278,7 @@ func TestServerListen(t *testing.T) {
 		done <- true
 	})
 	c.WriteJSON(message)
-	<- done
-
+	<-done
 
 	wsServer.Shutdown()
 	server.Shutdown(ctx)
@@ -310,7 +308,7 @@ func TestServerNotFound(t *testing.T) {
 	server.Shutdown(ctx)
 }
 
-func createWS () (*http.Server, *Server, context.Context) {
+func createWS() (*http.Server, *Server, context.Context) {
 	var srv *http.Server
 
 	r := chi.NewRouter()
@@ -318,14 +316,15 @@ func createWS () (*http.Server, *Server, context.Context) {
 
 	r.Get("/ws", server.Handler)
 
-	ctx, _ := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
 	srv = &http.Server{
-		Addr: ":8080",
+		Addr:    ":8080",
 		Handler: r,
 	}
 
 	go func() {
 		srv.ListenAndServe()
+		cancel()
 	}()
 
 	return srv, server, ctx

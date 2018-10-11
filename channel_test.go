@@ -88,7 +88,7 @@ func TestChannel_Id(t *testing.T) {
 	server, wsServer, ctx := createWS()
 
 	ch := wsServer.NewChannel("test-channel-id")
-	require.Equal(t, "test-channel-id", ch.Id(), "channel must have same id")
+	require.Equal(t, "test-channel-id", ch.ID(), "channel must have same id")
 
 	wsServer.Shutdown()
 	server.Shutdown(ctx)

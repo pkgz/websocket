@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-func main () {
+func main() {
 	r := chi.NewRouter()
 	wsServer := websocket.CreateAndRun()
 

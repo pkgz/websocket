@@ -15,24 +15,24 @@ import (
 
 // Server allow to keep connection list, broadcast channel and callbacks list.
 type Server struct {
-	connections 	map[*Conn]bool
-	channels	 	map[string]*Channel
-	broadcast		chan *Message
-	callbacks		map[string]HandlerFunc
+	connections map[*Conn]bool
+	channels    map[string]*Channel
+	broadcast   chan *Message
+	callbacks   map[string]HandlerFunc
 
-	addConn			chan *Conn
-	delConn			chan *Conn
+	addConn chan *Conn
+	delConn chan *Conn
 
-	delChan			[]chan *Conn
+	delChan []chan *Conn
 
-	onConnect		func (c *Conn)
-	onDisconnect	func (c *Conn)
-	onMessage		func (c *Conn, h ws.Header, b []byte)
+	onConnect    func(c *Conn)
+	onDisconnect func(c *Conn)
+	onMessage    func(c *Conn, h ws.Header, b []byte)
 
-	shutdown		bool
-	done 			chan bool
+	shutdown bool
+	done     chan bool
 
-	mu				sync.Mutex
+	mu sync.Mutex
 }
 
 // Message is a struct for data which sending between application and clients.
@@ -47,19 +47,19 @@ type Message struct {
 // all function which has callback have this struct
 // as first element returns pointer to connection
 // its give opportunity to close connection or emit message to exactly this connection.
-type HandlerFunc func (c *Conn, msg *Message)
+type HandlerFunc func(c *Conn, msg *Message)
 
 // Create a new websocket server handler with the provided options.
-func Create () *Server {
+func Create() *Server {
 	srv := &Server{
 		connections: make(map[*Conn]bool),
-		channels: make(map[string]*Channel),
-		broadcast: make(chan *Message),
-		callbacks: make(map[string]HandlerFunc),
-		addConn: make(chan *Conn),
-		delConn: make(chan *Conn),
-		done: make(chan bool, 1),
-		shutdown: false,
+		channels:    make(map[string]*Channel),
+		broadcast:   make(chan *Message),
+		callbacks:   make(map[string]HandlerFunc),
+		addConn:     make(chan *Conn),
+		delConn:     make(chan *Conn),
+		done:        make(chan bool, 1),
+		shutdown:    false,
 	}
 	srv.onMessage = func(c *Conn, h ws.Header, b []byte) {
 		c.Write(h, b)
@@ -68,37 +68,37 @@ func Create () *Server {
 }
 
 // CreateAndRun instantly create and run websocket server.
-func CreateAndRun () *Server {
+func CreateAndRun() *Server {
 	s := Create()
 	s.Run()
 	return s
 }
 
 // Run start go routine which listening for channels.
-func (s *Server) Run () {
+func (s *Server) Run() {
 	go func() {
 		for {
 			select {
-			case <- s.done:
+			case <-s.done:
 				s.shutdown = true
 				break
-			case msg := <- s.broadcast:
+			case msg := <-s.broadcast:
 				go func() {
-					for c := range s.connections{
+					for c := range s.connections {
 						c.Emit(msg.Name, msg.Body)
 					}
 				}()
-			case conn := <- s.addConn:
+			case conn := <-s.addConn:
 				if !reflect.ValueOf(s.onConnect).IsNil() {
 					go s.onConnect(conn)
 				}
 				s.connections[conn] = true
-			case conn := <- s.delConn:
+			case conn := <-s.delConn:
 				if !reflect.ValueOf(s.onDisconnect).IsNil() {
 					go s.onDisconnect(conn)
 				}
 				go func() {
-					for _, dC := range s.delChan{
+					for _, dC := range s.delChan {
 						dC <- conn
 					}
 				}()
@@ -111,7 +111,7 @@ func (s *Server) Run () {
 // Shutdown must be called before application died
 // its goes throw all connection and closing it
 // and stopping all goroutines.
-func (s *Server) Shutdown () error {
+func (s *Server) Shutdown() error {
 	l := len(s.connections)
 	var wg sync.WaitGroup
 	wg.Add(l)
@@ -131,7 +131,7 @@ func (s *Server) Shutdown () error {
 }
 
 // Handler get upgrade connection to RFC 6455 and starting listener for it.
-func (s *Server) Handler (w http.ResponseWriter, r *http.Request) {
+func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 	if s.shutdown {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("websocket: server not started"))
@@ -223,7 +223,7 @@ func (s *Server) Handler (w http.ResponseWriter, r *http.Request) {
 }
 
 // On adding callback for message.
-func (s *Server) On (name string, f HandlerFunc) {
+func (s *Server) On(name string, f HandlerFunc) {
 	s.mu.Lock()
 	s.callbacks[name] = f
 	s.mu.Unlock()
@@ -231,7 +231,7 @@ func (s *Server) On (name string, f HandlerFunc) {
 
 // NewChannel create new channel and proxy channel delConn
 // for handling connection closing.
-func (s *Server) NewChannel (name string) *Channel {
+func (s *Server) NewChannel(name string) *Channel {
 	c := newChannel(name)
 	s.mu.Lock()
 	s.delChan = append(s.delChan, c.delConn)
@@ -240,28 +240,28 @@ func (s *Server) NewChannel (name string) *Channel {
 }
 
 // Set function which will be called when new connections come.
-func (s *Server) OnConnect (f func(c *Conn)) {
+func (s *Server) OnConnect(f func(c *Conn)) {
 	s.mu.Lock()
 	s.onConnect = f
 	s.mu.Unlock()
 }
 
 // Set function which will be called when new connections come.
-func (s *Server) OnDisconnect (f func(c *Conn)) {
+func (s *Server) OnDisconnect(f func(c *Conn)) {
 	s.mu.Lock()
 	s.onDisconnect = f
 	s.mu.Unlock()
 }
 
 // OnMessage handling byte message. By default this function works as echo.
-func (s *Server) OnMessage (f func(c *Conn, h ws.Header, b []byte)) {
+func (s *Server) OnMessage(f func(c *Conn, h ws.Header, b []byte)) {
 	s.mu.Lock()
 	s.onMessage = f
 	s.mu.Unlock()
 }
 
 // Emit emit message to all connections.
-func (s *Server) Emit (name string, body []byte) {
+func (s *Server) Emit(name string, body []byte) {
 	msg := Message{
 		Name: name,
 		Body: body,
@@ -270,11 +270,11 @@ func (s *Server) Emit (name string, body []byte) {
 }
 
 // Count return number of active connections.
-func (s *Server) Count () int {
+func (s *Server) Count() int {
 	return len(s.connections)
 }
 
-func (s *Server) processMessage (c *Conn, h ws.Header, b []byte) error {
+func (s *Server) processMessage(c *Conn, h ws.Header, b []byte) error {
 	var msg Message
 
 	if len(b) == 0 {
