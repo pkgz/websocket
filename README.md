@@ -1,7 +1,7 @@
 # websocket
 [![GoDoc](http://img.shields.io/badge/go-documentation-blue.svg?style=flat-square)](http://godoc.org/github.com/exelban/websocket)
 [![Go Report Card](https://goreportcard.com/badge/github.com/exelban/websocket)](https://goreportcard.com/report/github.com/exelban/websocket)
-[![Codecov](https://img.shields.io/codecov/c/github/exelban/websocket.svg?style=flat-square)](https://codecov.io/gh/exelban/websocket) 
+[![codecov](https://codecov.io/gh/exelban/websocket/branch/master/graph/badge.svg?token=A8eLVAj9cU)](https://codecov.io/gh/exelban/websocket)
 
 Simple websocket library for golang
 
