@@ -31,8 +31,11 @@ func (c *Conn) Emit(name string, body []byte) error {
 
 // Write write byte array to connection.
 func (c *Conn) Write(h ws.Header, b []byte) error {
-	ws.WriteHeader(c.conn, h)
-	_, err := c.conn.Write(b)
+	err := ws.WriteHeader(c.conn, h)
+	if err != nil {
+		return err
+	}
+	_, err = c.conn.Write(b)
 	return err
 }
 
