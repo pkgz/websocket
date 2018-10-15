@@ -39,30 +39,6 @@ func (c *Conn) Write(h ws.Header, b []byte) error {
 	return err
 }
 
-// Ping handler for pong request.
-func (c *Conn) Ping(b []byte) error {
-	h := ws.Header{
-		Fin:    true,
-		OpCode: ws.OpPing,
-		Masked: true,
-		Length: int64(len(b)),
-	}
-	err := c.Write(h, b)
-	return err
-}
-
-// Pong handler for ping request.
-func (c *Conn) Pong(b []byte) error {
-	h := ws.Header{
-		Fin:    true,
-		OpCode: ws.OpPong,
-		Masked: true,
-		Length: int64(len(b)),
-	}
-	err := c.Write(h, b)
-	return err
-}
-
 // Close closing websocket connection.
 func (c *Conn) Close() error {
 	err := c.conn.Close()

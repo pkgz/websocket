@@ -10,7 +10,7 @@ type Channel struct {
 	connections map[*Conn]bool
 	delConn     chan *Conn
 
-	mu sync.Mutex
+	mu sync.RWMutex
 }
 
 func newChannel(id string) *Channel {
@@ -24,7 +24,9 @@ func newChannel(id string) *Channel {
 		for {
 			select {
 			case conn := <-c.delConn:
+				c.mu.Lock()
 				delete(c.connections, conn)
+				c.mu.Unlock()
 			}
 		}
 	}()
@@ -34,6 +36,8 @@ func newChannel(id string) *Channel {
 
 // Count return number of connections in channel.
 func (c *Channel) Count() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return len(c.connections)
 }
 
@@ -58,6 +62,9 @@ func (c *Channel) Remove(conn *Conn) {
 
 // Emit emits message to all connections in channel.
 func (c *Channel) Emit(name string, body []byte) error {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	for con := range c.connections {
 		go func(con *Conn) {
 			con.Emit(name, body)

@@ -5,12 +5,10 @@
 
 Simple websocket library for golang
 
-# Feature Overview
-- onConnect/onDisconnect handlers
-- message routing (similary to implementation in socket.io)
-- groups (channels) implementation
-- using net.Conn as connection
-- lightweight and easy to use
+# Installation
+```bash
+go get github.com/exelban/websocket
+```
 
 # Example
 ## Echo
@@ -97,11 +95,11 @@ Results:
 **2** | **Pings/Pongs** | **Pass**
 **3** | **Reserved Bits** | **Pass**
 **4** | **Opcodes** | **Pass**
-**5** | **Fragmentation** | **Pass/Fail**
+**5** | **Fragmentation** | **Pass**
 **6** | **UTF-8 Handling** | **Pass**
 **7** | **Close Handling** | **Pass**
-**9** | **Limits/Performance** | **Pass/Fail**
-**10** | **Misc** | **Fail**
+**9** | **Limits/Performance** | **Pass**
+**10** | **Misc** | **Pass**
 **12** | **WebSocket Compression (different payloads)** | **Unimplemented**
 **13** | **WebSocket Compression (different parameters)** | **Unimplemented**
 
