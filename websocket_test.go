@@ -1,77 +1,92 @@
 package websocket
 
 import (
-	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
 	"github.com/gobwas/ws"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 	"math/rand"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 )
 
-var addr = flag.String("addr", "127.0.0.1:8080", "http service address")
-
 func TestServer_Run(t *testing.T) {
-	server, wsServer, ctx := createWS()
+	ts, wsServer := wsServer()
+	defer ts.Close()
+	defer wsServer.Shutdown()
 
-	u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
+	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	if err != nil {
-		t.Fatal("dial:", err)
-	}
+	require.NoError(t, err)
 	defer c.Close()
 
-	time.Sleep(1 * time.Millisecond) // Give some time to add connection
-
+	time.Sleep(1 * time.Millisecond)
 	require.Equal(t, 1, wsServer.Count(), "weboscket must contain only 1 connection")
-
-	wsServer.Shutdown()
-	server.Shutdown(ctx)
 }
 
 func TestServer_Shutdown(t *testing.T) {
-	server, wsServer, ctx := createWS()
+	ts, wsServer := wsServer()
+	defer ts.Close()
 	wsServer.Shutdown()
 
 	require.Equal(t, true, wsServer.shutdown, "websocket must be shutdown")
 
-	u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
+	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	_, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	require.Equal(t, "websocket: bad handshake", err.Error(), "websocket must reject connection")
+}
 
-	server.Shutdown(ctx)
+func TestServer_Handler(t *testing.T) {
+	wsServer := CreateAndRun()
+	r := chi.NewRouter()
+
+	r.Use(middleware.Compress(6, "gzip"))
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ww := middleware.NewWrapResponseWriter(w, 1)
+			next.ServeHTTP(ww, r)
+		})
+	})
+
+	r.Get("/ws", wsServer.Handler)
+
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+	defer wsServer.Shutdown()
+
+	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
+	_, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	require.Error(t, err, "must be rejected upgrade")
 }
 
 func TestServer_Count(t *testing.T) {
-	server, wsServer, ctx := createWS()
+	ts, wsServer := wsServer()
+	defer ts.Close()
+	defer wsServer.Shutdown()
 
 	rand.Seed(time.Now().Unix())
 	number := rand.Intn(14-3) + 3
 
 	for i := 1; i <= number; i++ {
-		u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
+		u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 		_, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-		if err != nil {
-			t.Fatal("dial:", err)
-		}
+		require.NoError(t, err)
 	}
 
-	time.Sleep(1 * time.Millisecond) // Give some time to add connection
 	require.Equal(t, number, wsServer.Count(), fmt.Sprintf("weboscket must contain only %d connection", number))
-
-	wsServer.Shutdown()
-	server.Shutdown(ctx)
 }
 
 func TestServer_OnConnect(t *testing.T) {
-	server, wsServer, ctx := createWS()
+	ts, wsServer := wsServer()
+	defer ts.Close()
+	defer wsServer.Shutdown()
 
 	msg := Message{
 		Name: "TesT",
@@ -82,11 +97,9 @@ func TestServer_OnConnect(t *testing.T) {
 		c.Emit(msg.Name, msg.Body)
 	})
 
-	u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
+	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	if err != nil {
-		t.Fatal("dial:", err)
-	}
+	require.NoError(t, err)
 	defer c.Close()
 
 	for {
@@ -95,13 +108,12 @@ func TestServer_OnConnect(t *testing.T) {
 		require.Equal(t, msg, message, "response message must be the same as send")
 		break
 	}
-
-	wsServer.Shutdown()
-	server.Shutdown(ctx)
 }
 
 func TestServer_OnConnect2(t *testing.T) {
-	server, wsServer, ctx := createWS()
+	ts, wsServer := wsServer()
+	defer ts.Close()
+	defer wsServer.Shutdown()
 
 	msg := []byte("Hello from byte array")
 	h := ws.Header{
@@ -114,11 +126,9 @@ func TestServer_OnConnect2(t *testing.T) {
 		c.Write(h, msg)
 	})
 
-	u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
+	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	if err != nil {
-		t.Fatal("dial:", err)
-	}
+	require.NoError(t, err)
 	defer c.Close()
 
 	for {
@@ -126,13 +136,12 @@ func TestServer_OnConnect2(t *testing.T) {
 		require.Equal(t, msg, b, "response message must be the same as send (byte array)")
 		break
 	}
-
-	wsServer.Shutdown()
-	server.Shutdown(ctx)
 }
 
 func TestServer_OnDisconnect(t *testing.T) {
-	server, wsServer, ctx := createWS()
+	ts, wsServer := wsServer()
+	defer ts.Close()
+	defer wsServer.Shutdown()
 	done := make(chan bool, 1)
 
 	msg := Message{
@@ -141,31 +150,32 @@ func TestServer_OnDisconnect(t *testing.T) {
 	}
 
 	wsServer.OnDisconnect(func(c *Conn) {
+		c.Emit(msg.Name, msg.Body)
 		done <- true
-		err := c.Emit(msg.Name, msg.Body)
-		require.Error(t, err, "server must return error with closed connection")
-		require.Equal(t, 0, wsServer.Count(), "server must have 0 connections")
 	})
 
-	u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
+	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	if err != nil {
-		t.Fatal("dial:", err)
-	}
+	require.NoError(t, err)
 	defer c.Close()
 
+	c.WriteControl(8, nil, time.Now().Add(30*time.Second))
+
 	for {
-		c.WriteControl(8, nil, time.Now().Add(30*time.Second))
-		<-done
+		_, b, _ := c.ReadMessage()
+		require.Empty(t, b)
 		break
 	}
 
-	wsServer.Shutdown()
-	server.Shutdown(ctx)
+	<-done
+	time.Sleep(1 * time.Millisecond)
+	require.Equal(t, 0, wsServer.Count(), "server must have 0 connections")
 }
 
 func TestServer_OnMessage(t *testing.T) {
-	server, wsServer, ctx := createWS()
+	ts, wsServer := wsServer()
+	defer ts.Close()
+	defer wsServer.Shutdown()
 
 	msg := []byte("Hello from byte array")
 
@@ -175,23 +185,20 @@ func TestServer_OnMessage(t *testing.T) {
 		done <- true
 	})
 
-	u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
+	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	if err != nil {
-		t.Fatal("dial:", err)
-	}
+	require.NoError(t, err)
 	defer c.Close()
 
 	c.WriteMessage(1, msg)
 
 	<-done
-
-	wsServer.Shutdown()
-	server.Shutdown(ctx)
 }
 
 func TestServer_On(t *testing.T) {
-	server, wsServer, ctx := createWS()
+	ts, wsServer := wsServer()
+	defer ts.Close()
+	defer wsServer.Shutdown()
 
 	message := Message{
 		Name: "LoL",
@@ -205,47 +212,41 @@ func TestServer_On(t *testing.T) {
 		done <- true
 	})
 
-	u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
+	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	if err != nil {
-		t.Fatal("dial:", err)
-	}
+	require.NoError(t, err)
 	defer c.Close()
 
 	c.WriteJSON(message)
 
 	<-done
-
-	wsServer.Shutdown()
-	server.Shutdown(ctx)
 }
 
 func TestServer_NewChannel(t *testing.T) {
-	server, wsServer, ctx := createWS()
+	ts, wsServer := wsServer()
+	defer ts.Close()
+	defer wsServer.Shutdown()
 
 	ch := wsServer.NewChannel("test")
 	require.NotNil(t, ch, "must be channel")
 
 	var typ *Channel
 	require.IsType(t, typ, ch, "must be Channel type")
-
-	wsServer.Shutdown()
-	server.Shutdown(ctx)
 }
 
 func TestServer_Emit(t *testing.T) {
-	server, wsServer, ctx := createWS()
+	ts, wsServer := wsServer()
+	defer ts.Close()
+	defer wsServer.Shutdown()
 
 	msg := Message{
 		Name: "test",
 		Body: []byte("Hello from emit test"),
 	}
 
-	u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
+	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	if err != nil {
-		t.Fatal("dial:", err)
-	}
+	require.NoError(t, err)
 	defer c.Close()
 
 	wsServer.Emit(msg.Name, msg.Body)
@@ -258,15 +259,14 @@ func TestServer_Emit(t *testing.T) {
 		require.Equal(t, msg, res, "response message must be the same as send (byte array)")
 		break
 	}
-
-	wsServer.Shutdown()
-	server.Shutdown(ctx)
 }
 
 func TestServerListen(t *testing.T) {
-	server, wsServer, ctx := createWS()
+	ts, wsServer := wsServer()
+	defer ts.Close()
+	defer wsServer.Shutdown()
 
-	u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
+	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	require.NoError(t, err, "connection must be established without error")
 	defer c.Close()
@@ -282,21 +282,18 @@ func TestServerListen(t *testing.T) {
 	})
 	c.WriteJSON(message)
 	<-done
-
-	wsServer.Shutdown()
-	server.Shutdown(ctx)
 }
 
 func TestServerNotFound(t *testing.T) {
-	server, wsServer, ctx := createWS()
+	ts, wsServer := wsServer()
+	defer ts.Close()
+	defer wsServer.Shutdown()
 
 	msg := []byte("Hello World")
 
-	u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
+	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	if err != nil {
-		t.Fatal("dial:", err)
-	}
+	require.NoError(t, err)
 	defer c.Close()
 
 	c.WriteMessage(1, msg)
@@ -306,30 +303,35 @@ func TestServerNotFound(t *testing.T) {
 		require.Equal(t, msg, b, "response message must be the same as send (byte array)")
 		break
 	}
-
-	wsServer.Shutdown()
-	server.Shutdown(ctx)
 }
 
-func createWS() (*http.Server, *Server, context.Context) {
-	var srv *http.Server
+func TestServerProcessMessage(t *testing.T) {
+	ts, wsServer := wsServer()
+	defer ts.Close()
+	defer wsServer.Shutdown()
 
-	r := chi.NewRouter()
-	server := CreateAndRun()
+	msg := []byte("")
 
-	r.Get("/ws", server.Handler)
+	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
+	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	require.NoError(t, err)
+	defer c.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	srv = &http.Server{
-		Addr:    ":8080",
-		Handler: r,
+	c.WriteMessage(1, msg)
+
+	for {
+		_, b, _ := c.ReadMessage()
+		require.Len(t, b, 0, "response length must be 0")
+		break
 	}
+}
 
-	go func() {
-		srv.ListenAndServe()
-		cancel()
-	}()
+func wsServer() (*httptest.Server, *Server) {
+	wsServer := CreateAndRun()
+	r := chi.NewRouter()
 
-	time.Sleep(100 * time.Millisecond) // give time to server wake up
-	return srv, server, ctx
+	r.Get("/ws", wsServer.Handler)
+
+	ts := httptest.NewServer(r)
+	return ts, wsServer
 }

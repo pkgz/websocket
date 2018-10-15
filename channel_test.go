@@ -4,11 +4,14 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 	"net/url"
+	"strings"
 	"testing"
 )
 
 func TestChannel_Add(t *testing.T) {
-	server, wsServer, ctx := createWS()
+	ts, wsServer := wsServer()
+	defer ts.Close()
+	defer wsServer.Shutdown()
 
 	ch := wsServer.NewChannel("test-channel-add")
 
@@ -17,19 +20,18 @@ func TestChannel_Add(t *testing.T) {
 		require.Equal(t, 1, ch.Count(), "channel must contain only 1 connection")
 	})
 
-	u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
+	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
 		t.Fatal("dial:", err)
 	}
 	defer c.Close()
-
-	wsServer.Shutdown()
-	server.Shutdown(ctx)
 }
 
 func TestChannel_Emit(t *testing.T) {
-	server, wsServer, ctx := createWS()
+	ts, wsServer := wsServer()
+	defer ts.Close()
+	defer wsServer.Shutdown()
 
 	ch := wsServer.NewChannel("test-channel-emit")
 
@@ -43,7 +45,7 @@ func TestChannel_Emit(t *testing.T) {
 		ch.Emit(message.Name, message.Body)
 	})
 
-	u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
+	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
 		t.Fatal("dial:", err)
@@ -56,13 +58,12 @@ func TestChannel_Emit(t *testing.T) {
 		require.Equal(t, message, msg, "received message must be same as send")
 		break
 	}
-
-	wsServer.Shutdown()
-	server.Shutdown(ctx)
 }
 
 func TestChannel_Remove(t *testing.T) {
-	server, wsServer, ctx := createWS()
+	ts, wsServer := wsServer()
+	defer ts.Close()
+	defer wsServer.Shutdown()
 
 	ch := wsServer.NewChannel("test-channel-add")
 
@@ -73,23 +74,19 @@ func TestChannel_Remove(t *testing.T) {
 		require.Equal(t, 0, ch.Count(), "channel must contain only 1 connection")
 	})
 
-	u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
+	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
 		t.Fatal("dial:", err)
 	}
 	defer c.Close()
-
-	wsServer.Shutdown()
-	server.Shutdown(ctx)
 }
 
 func TestChannel_Id(t *testing.T) {
-	server, wsServer, ctx := createWS()
+	ts, wsServer := wsServer()
+	defer ts.Close()
+	defer wsServer.Shutdown()
 
 	ch := wsServer.NewChannel("test-channel-id")
 	require.Equal(t, "test-channel-id", ch.ID(), "channel must have same id")
-
-	wsServer.Shutdown()
-	server.Shutdown(ctx)
 }

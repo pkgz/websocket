@@ -1,4 +1,53 @@
 // Package websocket implements the WebSocket protocol with additional functions.
+/*
+Examples
+
+Echo server:
+	package main
+
+	import (
+		"github.com/exelban/websocket"
+		"github.com/go-chi/chi"
+		"net/http"
+	)
+
+	func main () {
+		r := chi.NewRouter()
+		wsServer := websocket.CreateAndRun()
+
+		r.Get("/ws", wsServer.Handler)
+		wsServer.On("echo", func(c *websocket.Conn, msg *websocket.Message) {
+			c.Emit("echo", msg.Body)
+		})
+
+		http.ListenAndServe(":8080", r)
+	}
+
+Websocket with group:
+	package main
+
+	import (
+		"github.com/exelban/websocket"
+		"github.com/go-chi/chi"
+		"net/http"
+	)
+
+	func main () {
+		r := chi.NewRouter()
+		wsServer := websocket.CreateAndRun()
+
+		ch := wsServer.NewChannel("test")
+
+		wsServer.OnConnect(func(c *websocket.Conn) {
+			ch.Add(c)
+			ch.Emit("connection", []byte("new connection come"))
+		})
+
+		r.Get("/ws", wsServer.Handler)
+		http.ListenAndServe(":8080", r)
+	}
+
+*/
 package websocket
 
 import (
@@ -6,6 +55,7 @@ import (
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"reflect"
@@ -32,7 +82,7 @@ type Server struct {
 	shutdown bool
 	done     chan bool
 
-	mu sync.Mutex
+	mu sync.RWMutex
 }
 
 // Message is a struct for data which sending between application and clients.
@@ -83,15 +133,19 @@ func (s *Server) Run() {
 				break
 			case msg := <-s.broadcast:
 				go func() {
+					s.mu.RLock()
 					for c := range s.connections {
 						_ = c.Emit(msg.Name, msg.Body)
 					}
+					s.mu.RUnlock()
 				}()
 			case conn := <-s.addConn:
 				if !reflect.ValueOf(s.onConnect).IsNil() {
 					go s.onConnect(conn)
 				}
+				s.mu.Lock()
 				s.connections[conn] = true
+				s.mu.Unlock()
 			case conn := <-s.delConn:
 				if !reflect.ValueOf(s.onDisconnect).IsNil() {
 					go s.onDisconnect(conn)
@@ -101,7 +155,9 @@ func (s *Server) Run() {
 						dC <- conn
 					}
 				}()
+				s.mu.Lock()
 				delete(s.connections, conn)
+				s.mu.Unlock()
 			}
 		}
 	}()
@@ -112,6 +168,9 @@ func (s *Server) Run() {
 // and stopping all goroutines.
 func (s *Server) Shutdown() error {
 	s.shutdown = true
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	l := len(s.connections)
 	var wg sync.WaitGroup
@@ -135,11 +194,15 @@ func (s *Server) Shutdown() error {
 func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 	if s.shutdown {
 		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte("websocket: server not started"))
+		w.Write([]byte("websocket: server not started"))
 		return
 	}
 
-	conn, _, _, _ := ws.UpgradeHTTP(r, w)
+	conn, _, _, err := ws.UpgradeHTTP(r, w)
+	if err != nil {
+		log.Printf("websocket: upgrade error %v", err)
+		return
+	}
 	defer conn.Close()
 
 	connection := &Conn{
@@ -167,14 +230,13 @@ func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 
 		switch header.OpCode {
 		case ws.OpPing:
-			b := make([]byte, header.Length)
-			_, err = io.ReadFull(r, b)
-			connection.Pong(b)
+			header.OpCode = ws.OpPong
+			header.Masked = false
+			ws.WriteHeader(conn, header)
+			io.CopyN(conn, cipherReader, header.Length)
 			continue
 		case ws.OpPong:
-			b := make([]byte, header.Length)
-			_, err = io.ReadFull(r, b)
-			connection.Ping(b)
+			io.CopyN(ioutil.Discard, conn, header.Length)
 			continue
 		case ws.OpClose:
 			utf8Fin = true
@@ -274,6 +336,8 @@ func (s *Server) Emit(name string, body []byte) {
 
 // Count return number of active connections.
 func (s *Server) Count() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return len(s.connections)
 }
 
@@ -302,6 +366,8 @@ func (s *Server) processMessage(c *Conn, h ws.Header, b []byte) error {
 			s.onMessage(c, h, b)
 			return nil
 		}
+	default:
+		s.onMessage(c, h, b)
 	}
 
 	return nil

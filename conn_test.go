@@ -1,16 +1,22 @@
 package websocket
 
 import (
+	"context"
 	"github.com/gobwas/ws"
 	"github.com/stretchr/testify/require"
 	"net/url"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestConn_Ping(t *testing.T) {
-	server, wsServer, ctx := createWS()
+	ts, wsServer := wsServer()
+	defer ts.Close()
+	defer wsServer.Shutdown()
 
-	u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
+	ctx := context.Background()
+	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, _, err := ws.Dial(ctx, u.String())
 	if err != nil {
 		t.Fatal("dial:", err)
@@ -18,7 +24,6 @@ func TestConn_Ping(t *testing.T) {
 	defer c.Close()
 
 	m := []byte("ping")
-	mask := 6
 	h := ws.Header{
 		Fin:    true,
 		OpCode: ws.OpPing,
@@ -28,18 +33,19 @@ func TestConn_Ping(t *testing.T) {
 	ws.WriteHeader(c, h)
 	_, err = c.Write(m)
 
-	resp := make([]byte, mask+len(m))
+	time.Sleep(1 * time.Millisecond)
+	resp := make([]byte, len(m)+2)
 	c.Read(resp)
-	require.Equal(t, m, resp[mask:mask+len(m)], "response and request must be the same")
-
-	wsServer.Shutdown()
-	server.Shutdown(ctx)
+	require.Equal(t, m, resp[2:], "response and request must be the same")
 }
 
 func TestConn_Pong(t *testing.T) {
-	server, wsServer, ctx := createWS()
+	ts, wsServer := wsServer()
+	defer ts.Close()
+	defer wsServer.Shutdown()
 
-	u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
+	ctx := context.Background()
+	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, _, err := ws.Dial(ctx, u.String())
 	if err != nil {
 		t.Fatal("dial:", err)
@@ -47,7 +53,6 @@ func TestConn_Pong(t *testing.T) {
 	defer c.Close()
 
 	m := []byte("pong")
-	mask := 6
 	h := ws.Header{
 		Fin:    true,
 		OpCode: ws.OpPong,
@@ -57,10 +62,46 @@ func TestConn_Pong(t *testing.T) {
 	ws.WriteHeader(c, h)
 	_, err = c.Write(m)
 
-	resp := make([]byte, mask+len(m))
-	c.Read(resp)
-	require.Equal(t, m, resp[mask:mask+len(m)], "response and request must be the same")
+	time.Sleep(1 * time.Millisecond)
+	require.NoError(t, err)
+}
 
-	wsServer.Shutdown()
-	server.Shutdown(ctx)
+func TestConn_Fragment(t *testing.T) {
+	ts, wsServer := wsServer()
+	defer ts.Close()
+	defer wsServer.Shutdown()
+
+	ctx := context.Background()
+	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
+	c, _, _, err := ws.Dial(ctx, u.String())
+	if err != nil {
+		t.Fatal("dial:", err)
+	}
+	defer c.Close()
+
+	m0 := []byte("something")
+	h := ws.Header{
+		Fin:    true,
+		OpCode: ws.OpText,
+		Masked: true,
+		Length: int64(len(m0)),
+	}
+	ws.WriteHeader(c, h)
+	_, err = c.Write(m0)
+
+	m := []byte("nothing")
+	h = ws.Header{
+		Fin:    true,
+		OpCode: ws.OpContinuation,
+		Masked: true,
+		Length: 0,
+	}
+	ws.WriteHeader(c, h)
+	_, err = c.Write(m)
+
+	time.Sleep(1 * time.Millisecond)
+
+	resp := make([]byte, len(m0)+2)
+	c.Read(resp)
+	require.Equal(t, m0, resp[2:], "response and request must be the same")
 }
