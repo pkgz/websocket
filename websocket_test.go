@@ -90,7 +90,7 @@ func TestServer_OnConnect(t *testing.T) {
 
 	msg := Message{
 		Name: "TesT",
-		Body: []byte("Hello World"),
+		Body: "Hello World",
 	}
 
 	wsServer.OnConnect(func(c *Conn) {
@@ -105,6 +105,7 @@ func TestServer_OnConnect(t *testing.T) {
 	for {
 		var message Message
 		c.ReadJSON(&message)
+
 		require.Equal(t, msg, message, "response message must be the same as send")
 		break
 	}
@@ -202,7 +203,7 @@ func TestServer_On(t *testing.T) {
 
 	message := Message{
 		Name: "LoL",
-		Body: []byte("Hello World"),
+		Body: "Hello World",
 	}
 
 	done := make(chan bool, 1)
@@ -241,7 +242,7 @@ func TestServer_Emit(t *testing.T) {
 
 	msg := Message{
 		Name: "test",
-		Body: []byte("Hello from emit test"),
+		Body: "Hello from emit test",
 	}
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
@@ -274,7 +275,7 @@ func TestServerListen(t *testing.T) {
 	done := make(chan bool, 1)
 	message := Message{
 		Name: "echo",
-		Body: []byte("Hello from echo"),
+		Body: "Hello from echo",
 	}
 	wsServer.On("echo", func(c *Conn, msg *Message) {
 		require.Equal(t, message, *msg, "response message must be the same as send (byte array)")

@@ -37,7 +37,7 @@ func TestChannel_Emit(t *testing.T) {
 
 	message := Message{
 		Name: "test-channel-emit",
-		Body: []byte("message"),
+		Body: "message",
 	}
 
 	wsServer.OnConnect(func(c *Conn) {

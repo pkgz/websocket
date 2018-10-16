@@ -12,7 +12,7 @@ type Conn struct {
 }
 
 // Emit emit message to connection.
-func (c *Conn) Emit(name string, body []byte) error {
+func (c *Conn) Emit(name string, body interface{}) error {
 	msg := Message{
 		Name: name,
 		Body: body,
@@ -36,6 +36,21 @@ func (c *Conn) Write(h ws.Header, b []byte) error {
 		return err
 	}
 	_, err = c.conn.Write(b)
+	return err
+}
+
+// Send send data to connection.
+func (c *Conn) Send(data interface{}) error {
+	b, _ := json.Marshal(data)
+
+	h := ws.Header{
+		Fin:    true,
+		OpCode: ws.OpText,
+		Masked: false,
+		Length: int64(len(b)),
+	}
+
+	err := c.Write(h, b)
 	return err
 }
 

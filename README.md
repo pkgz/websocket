@@ -77,7 +77,7 @@ func main () {
 
 	r.Get("/ws", wsServer.Handler)
 	wsServer.OnMessage(func(c *websocket.Conn, h ws.Header, b []byte) {
-		c.Write(h, b)
+		c.Send("Hello World")
 	})
 
 	http.ListenAndServe(":8080", r)

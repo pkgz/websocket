@@ -3,6 +3,7 @@ package websocket
 import (
 	"context"
 	"github.com/gobwas/ws"
+	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 	"net/url"
 	"strings"
@@ -64,6 +65,29 @@ func TestConn_Pong(t *testing.T) {
 
 	time.Sleep(1 * time.Millisecond)
 	require.NoError(t, err)
+}
+
+func TestConn_Send(t *testing.T) {
+	ts, wsServer := wsServer()
+	defer ts.Close()
+	defer wsServer.Shutdown()
+
+	msg := "ping"
+	wsServer.OnConnect(func(c *Conn) {
+		c.Send(msg)
+	})
+
+	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
+	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	if err != nil {
+		t.Fatal("dial:", err)
+	}
+	defer c.Close()
+
+	var m interface{}
+	c.ReadJSON(&m)
+
+	require.Equal(t, msg, m, "response and request must be the same")
 }
 
 func TestConn_Fragment(t *testing.T) {
