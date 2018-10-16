@@ -52,7 +52,7 @@ func main () {
 
 	wsServer.OnConnect(func(c *websocket.Conn) {
 		ch.Add(c)
-		ch.Emit("connection", []byte("new connection come"))
+		ch.Emit("connection", "new connection come")
 	})
 
 	r.Get("/ws", wsServer.Handler)
