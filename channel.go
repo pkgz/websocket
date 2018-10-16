@@ -61,7 +61,7 @@ func (c *Channel) Remove(conn *Conn) {
 }
 
 // Emit emits message to all connections in channel.
-func (c *Channel) Emit(name string, body []byte) error {
+func (c *Channel) Emit(name string, body interface{}) error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 

@@ -89,8 +89,8 @@ type Server struct {
 // Name using for matching callback function in On function.
 // Body will be transformed to byte array and returned to callback.
 type Message struct {
-	Name string `json:"name"`
-	Body []byte `json:"body"`
+	Name string      `json:"name"`
+	Body interface{} `json:"body"`
 }
 
 // HandleFunc is a type for handle function
@@ -326,7 +326,7 @@ func (s *Server) OnMessage(f func(c *Conn, h ws.Header, b []byte)) {
 }
 
 // Emit emit message to all connections.
-func (s *Server) Emit(name string, body []byte) {
+func (s *Server) Emit(name string, body interface{}) {
 	msg := Message{
 		Name: name,
 		Body: body,
