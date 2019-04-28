@@ -20,12 +20,18 @@ import (
 func TestServer_Run(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+	defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	require.NoError(t, err)
-	defer c.Close()
+	defer func() {
+		err := c.Close()
+		require.NoError(t, err)
+	}()
 
 	time.Sleep(1 * time.Millisecond)
 	require.Equal(t, 1, wsServer.Count(), "weboscket must contain only 1 connection")
@@ -34,12 +40,14 @@ func TestServer_Run(t *testing.T) {
 func TestServer_Shutdown(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	wsServer.Shutdown()
+	err := wsServer.Shutdown()
+	require.NoError(t, err)
 
 	require.Equal(t, true, wsServer.shutdown, "websocket must be shutdown")
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
-	_, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	_, _, err = websocket.DefaultDialer.Dial(u.String(), nil)
+	require.Error(t, err)
 	require.Equal(t, "websocket: bad handshake", err.Error(), "websocket must reject connection")
 }
 
@@ -59,7 +67,10 @@ func TestServer_Handler(t *testing.T) {
 
 	ts := httptest.NewServer(r)
 	defer ts.Close()
-	defer wsServer.Shutdown()
+		defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	_, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
@@ -69,7 +80,10 @@ func TestServer_Handler(t *testing.T) {
 func TestServer_Count(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+		defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	rand.Seed(time.Now().Unix())
 	number := rand.Intn(14-3) + 3
@@ -86,7 +100,10 @@ func TestServer_Count(t *testing.T) {
 func TestServer_OnConnect(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+		defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	msg := Message{
 		Name: "TesT",
@@ -94,17 +111,22 @@ func TestServer_OnConnect(t *testing.T) {
 	}
 
 	wsServer.OnConnect(func(c *Conn) {
-		c.Emit(msg.Name, msg.Body)
+		err := c.Emit(msg.Name, msg.Body)
+		require.NoError(t, err)
 	})
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	require.NoError(t, err)
-	defer c.Close()
+		defer func() {
+		err := c.Close()
+		require.NoError(t, err)
+	}()
 
 	for {
 		var message Message
-		c.ReadJSON(&message)
+		err := c.ReadJSON(&message)
+		require.NoError(t, err)
 
 		require.Equal(t, msg, message, "response message must be the same as send")
 		break
@@ -114,7 +136,10 @@ func TestServer_OnConnect(t *testing.T) {
 func TestServer_OnConnect2(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+		defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	msg := []byte("Hello from byte array")
 	h := ws.Header{
@@ -124,13 +149,17 @@ func TestServer_OnConnect2(t *testing.T) {
 	}
 
 	wsServer.OnConnect(func(c *Conn) {
-		c.Write(h, msg)
+		err := c.Write(h, msg)
+		require.NoError(t, err)
 	})
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	require.NoError(t, err)
-	defer c.Close()
+		defer func() {
+		err := c.Close()
+		require.NoError(t, err)
+	}()
 
 	for {
 		_, b, _ := c.ReadMessage()
@@ -142,7 +171,10 @@ func TestServer_OnConnect2(t *testing.T) {
 func TestServer_OnDisconnect(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+	defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 	done := make(chan bool, 1)
 
 	msg := Message{
@@ -151,16 +183,20 @@ func TestServer_OnDisconnect(t *testing.T) {
 	}
 
 	wsServer.OnDisconnect(func(c *Conn) {
-		c.Emit(msg.Name, msg.Body)
+		_ = c.Emit(msg.Name, msg.Body)
 		done <- true
 	})
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	require.NoError(t, err)
-	defer c.Close()
+	defer func() {
+		err := c.Close()
+		require.NoError(t, err)
+	}()
 
-	c.WriteControl(8, nil, time.Now().Add(30*time.Second))
+	err = c.WriteControl(8, nil, time.Now().Add(30*time.Second))
+	require.NoError(t, err)
 
 	for {
 		_, b, _ := c.ReadMessage()
@@ -176,7 +212,10 @@ func TestServer_OnDisconnect(t *testing.T) {
 func TestServer_OnMessage(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+		defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	msg := []byte("Hello from byte array")
 
@@ -189,9 +228,13 @@ func TestServer_OnMessage(t *testing.T) {
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	require.NoError(t, err)
-	defer c.Close()
+		defer func() {
+		err := c.Close()
+		require.NoError(t, err)
+	}()
 
-	c.WriteMessage(1, msg)
+	err = c.WriteMessage(1, msg)
+	require.NoError(t, err)
 
 	<-done
 }
@@ -199,7 +242,10 @@ func TestServer_OnMessage(t *testing.T) {
 func TestServer_On(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+		defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	message := Message{
 		Name: "LoL",
@@ -216,9 +262,13 @@ func TestServer_On(t *testing.T) {
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	require.NoError(t, err)
-	defer c.Close()
+		defer func() {
+		err := c.Close()
+		require.NoError(t, err)
+	}()
 
-	c.WriteJSON(message)
+	err = c.WriteJSON(message)
+	require.NoError(t, err)
 
 	<-done
 }
@@ -226,7 +276,10 @@ func TestServer_On(t *testing.T) {
 func TestServer_NewChannel(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+		defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	ch := wsServer.NewChannel("test")
 	require.NotNil(t, ch, "must be channel")
@@ -238,7 +291,10 @@ func TestServer_NewChannel(t *testing.T) {
 func TestServer_Emit(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+		defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	msg := Message{
 		Name: "test",
@@ -248,7 +304,10 @@ func TestServer_Emit(t *testing.T) {
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	require.NoError(t, err)
-	defer c.Close()
+		defer func() {
+		err := c.Close()
+		require.NoError(t, err)
+	}()
 
 	wsServer.Emit(msg.Name, msg.Body)
 
@@ -265,12 +324,18 @@ func TestServer_Emit(t *testing.T) {
 func TestServerListen(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+	defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	require.NoError(t, err, "connection must be established without error")
-	defer c.Close()
+	defer func() {
+		err := c.Close()
+		require.NoError(t, err)
+	}()
 
 	done := make(chan bool, 1)
 	message := Message{
@@ -281,23 +346,31 @@ func TestServerListen(t *testing.T) {
 		require.Equal(t, message, *msg, "response message must be the same as send (byte array)")
 		done <- true
 	})
-	c.WriteJSON(message)
+	err = c.WriteJSON(message)
+	require.NoError(t, err)
 	<-done
 }
 
 func TestServerNotFound(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+	defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	msg := []byte("Hello World")
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	require.NoError(t, err)
-	defer c.Close()
+	defer func() {
+		err := c.Close()
+		require.NoError(t, err)
+	}()
 
-	c.WriteMessage(1, msg)
+	err = c.WriteMessage(1, msg)
+	require.NoError(t, err)
 
 	for {
 		_, b, _ := c.ReadMessage()
@@ -309,16 +382,23 @@ func TestServerNotFound(t *testing.T) {
 func TestServerProcessMessage(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+	defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	msg := []byte("")
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	require.NoError(t, err)
-	defer c.Close()
+	defer func() {
+		err := c.Close()
+		require.NoError(t, err)
+	}()
 
-	c.WriteMessage(1, msg)
+	err = c.WriteMessage(1, msg)
+	require.NoError(t, err)
 
 	for {
 		_, b, _ := c.ReadMessage()
