@@ -67,7 +67,7 @@ func (c *Channel) Emit(name string, body interface{}) error {
 
 	for con := range c.connections {
 		go func(con *Conn) {
-			con.Emit(name, body)
+			_ = con.Emit(name, body)
 		}(con)
 	}
 
