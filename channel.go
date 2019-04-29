@@ -61,15 +61,15 @@ func (c *Channel) Remove(conn *Conn) {
 }
 
 // Emit emits message to all connections in channel.
-func (c *Channel) Emit(name string, body interface{}) error {
+func (c *Channel) Emit(name string, body interface{}) (err error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	for con := range c.connections {
 		go func(con *Conn) {
-			_ = con.Emit(name, body)
+			err = con.Emit(name, body)
 		}(con)
 	}
 
-	return nil
+	return
 }

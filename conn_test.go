@@ -3,13 +3,14 @@ package websocket
 import (
 	"context"
 	"github.com/gobwas/ws"
-	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
 )
+
+const messagePrefix = 2
 
 func TestConn_Ping(t *testing.T) {
 	ts, wsServer := wsServer()
@@ -88,25 +89,26 @@ func TestConn_Send(t *testing.T) {
 		require.NoError(t, err)
 	}()
 
-	msg := "ping"
+	msg := []byte{0, 1, 2, 3, 4, 5, 6, 7}
 	wsServer.OnConnect(func(c *Conn) {
 		err := c.Send(msg)
 		require.NoError(t, err)
 	})
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	c, _, _, err := ws.Dial(context.Background(), u.String())
 	require.NoError(t, err)
 	defer func() {
 		err := c.Close()
 		require.NoError(t, err)
 	}()
 
-	var m interface{}
-	err = c.ReadJSON(&m)
+	b := make([]byte, len(msg)+messagePrefix)
+	err = c.SetDeadline(time.Now().Add(300 * time.Millisecond))
 	require.NoError(t, err)
-
-	require.Equal(t, msg, m, "response and request must be the same")
+	_, err = c.Read(b)
+	require.NoError(t, err)
+	require.Equal(t, msg, b[messagePrefix:], "response and request must be the same")
 }
 
 func TestConn_Fragment(t *testing.T) {

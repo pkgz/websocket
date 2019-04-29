@@ -9,7 +9,6 @@ install: true
 
 before_script:
   - go get github.com/go-chi/chi
-  - go get github.com/gorilla/websocket
   - go get github.com/stretchr/testify
 
 script:

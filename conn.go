@@ -41,7 +41,13 @@ func (c *Conn) Write(h ws.Header, b []byte) error {
 
 // Send send data to connection.
 func (c *Conn) Send(data interface{}) error {
-	b, _ := json.Marshal(data)
+	var b []byte
+	switch data.(type) {
+	case []byte:
+		b = data.([]byte)
+	default:
+		b, _ = json.Marshal(data)
+	}
 
 	h := ws.Header{
 		Fin:    true,

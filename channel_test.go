@@ -1,11 +1,14 @@
 package websocket
 
 import (
-	"github.com/gorilla/websocket"
+	"context"
+	"encoding/json"
+	"github.com/gobwas/ws"
 	"github.com/stretchr/testify/require"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestChannel_Add(t *testing.T) {
@@ -24,7 +27,7 @@ func TestChannel_Add(t *testing.T) {
 	})
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	c, _, _, err := ws.Dial(context.Background(), u.String())
 	require.NoError(t, err)
 	defer func() {
 		err := c.Close()
@@ -46,15 +49,18 @@ func TestChannel_Emit(t *testing.T) {
 		Name: "test-channel-emit",
 		Body: "message",
 	}
+	messageBytes, err := json.Marshal(message)
+	require.NoError(t, err)
 
 	wsServer.OnConnect(func(c *Conn) {
+		time.Sleep(100 * time.Millisecond)
 		ch.Add(c)
 		err := ch.Emit(message.Name, message.Body)
 		require.NoError(t, err)
 	})
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	c, _, _, err := ws.Dial(context.Background(), u.String())
 	require.NoError(t, err)
 	defer func() {
 		err := c.Close()
@@ -63,7 +69,10 @@ func TestChannel_Emit(t *testing.T) {
 
 	for {
 		var msg Message
-		err := c.ReadJSON(&msg)
+		b := make([]byte, len(messageBytes)+messagePrefix)
+		n, err := c.Read(b)
+		require.NoError(t, err)
+		err = json.Unmarshal(b[messagePrefix:n], &msg)
 		require.NoError(t, err)
 		require.Equal(t, message, msg, "received message must be same as send")
 		break
@@ -88,7 +97,7 @@ func TestChannel_Remove(t *testing.T) {
 	})
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	c, _, _, err := ws.Dial(context.Background(), u.String())
 	require.NoError(t, err)
 	defer func() {
 		err := c.Close()

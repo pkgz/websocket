@@ -219,7 +219,7 @@ func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 	cipherReader := wsutil.NewCipherReader(nil, [4]byte{0, 0, 0, 0})
 
 	for {
-		header, err := ws.ReadHeader(conn)
+		header, _ := ws.ReadHeader(conn)
 		if err = ws.CheckHeader(header, state); err != nil {
 			s.delConn <- connection
 			return
