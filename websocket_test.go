@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/gobwas/ws"
+	"github.com/gobwas/ws/wsutil"
 	"github.com/stretchr/testify/require"
 	"math/rand"
 	"net"
@@ -68,7 +69,7 @@ func TestServer_Handler(t *testing.T) {
 
 	ts := httptest.NewServer(r)
 	defer ts.Close()
-		defer func() {
+	defer func() {
 		err := wsServer.Shutdown()
 		require.NoError(t, err)
 	}()
@@ -81,7 +82,7 @@ func TestServer_Handler(t *testing.T) {
 func TestServer_Count(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-		defer func() {
+	defer func() {
 		err := wsServer.Shutdown()
 		require.NoError(t, err)
 	}()
@@ -105,7 +106,7 @@ func TestServer_Count(t *testing.T) {
 func TestServer_OnConnect(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-		defer func() {
+	defer func() {
 		err := wsServer.Shutdown()
 		require.NoError(t, err)
 	}()
@@ -125,19 +126,21 @@ func TestServer_OnConnect(t *testing.T) {
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, _, err := ws.Dial(context.Background(), u.String())
 	require.NoError(t, err)
-		defer func() {
+	err = c.SetDeadline(time.Now().Add(3000 * time.Millisecond))
+	require.NoError(t, err)
+	defer func() {
 		err := c.Close()
 		require.NoError(t, err)
 	}()
 
 	for {
+		mes, op, err := wsutil.ReadServerData(c)
+		require.NoError(t, err)
+		require.Equal(t, true, op.IsData())
+		require.Equal(t, messageBytes, mes, "response and request must be the same")
+
 		var message Message
-		b := make([]byte, len(messageBytes)+messagePrefix)
-		err = c.SetDeadline(time.Now().Add(1000 * time.Millisecond))
-		require.NoError(t, err)
-		_, err = c.Read(b)
-		require.NoError(t, err)
-		err = json.Unmarshal(b[messagePrefix:], &message)
+		err = json.Unmarshal(mes, &message)
 		require.Equal(t, msg, message, "response message must be the same as send")
 		break
 	}
@@ -146,7 +149,7 @@ func TestServer_OnConnect(t *testing.T) {
 func TestServer_OnConnect2(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-		defer func() {
+	defer func() {
 		err := wsServer.Shutdown()
 		require.NoError(t, err)
 	}()
@@ -159,6 +162,7 @@ func TestServer_OnConnect2(t *testing.T) {
 	}
 
 	wsServer.OnConnect(func(c *Conn) {
+		time.Sleep(300 * time.Millisecond)
 		err := c.Write(h, msg)
 		require.NoError(t, err)
 	})
@@ -166,20 +170,19 @@ func TestServer_OnConnect2(t *testing.T) {
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, _, err := ws.Dial(context.Background(), u.String())
 	require.NoError(t, err)
-		defer func() {
-		err := c.Close()
-		require.NoError(t, err)
-	}()
+	err = c.SetDeadline(time.Now().Add(3000 * time.Millisecond))
+	require.NoError(t, err)
 
 	for {
-		b := make([]byte, len(msg)+messagePrefix)
-		err = c.SetDeadline(time.Now().Add(300 * time.Millisecond))
+		mes, op, err := wsutil.ReadServerData(c)
 		require.NoError(t, err)
-		_, err = c.Read(b)
-		require.NoError(t, err)
-		require.Equal(t, msg, b[messagePrefix:], "response and request must be the same")
+		require.Equal(t, true, op.IsData())
+		require.Equal(t, msg, mes, "response and request must be the same")
 		break
 	}
+
+	err = c.Close()
+	require.NoError(t, err)
 }
 
 func TestServer_OnDisconnect(t *testing.T) {
@@ -234,7 +237,7 @@ func TestServer_OnDisconnect(t *testing.T) {
 func TestServer_OnMessage(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-		defer func() {
+	defer func() {
 		err := wsServer.Shutdown()
 		require.NoError(t, err)
 	}()
@@ -250,7 +253,7 @@ func TestServer_OnMessage(t *testing.T) {
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, _, err := ws.Dial(context.Background(), u.String())
 	require.NoError(t, err)
-		defer func() {
+	defer func() {
 		err := c.Close()
 		require.NoError(t, err)
 	}()
@@ -273,7 +276,7 @@ func TestServer_OnMessage(t *testing.T) {
 func TestServer_On(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-		defer func() {
+	defer func() {
 		err := wsServer.Shutdown()
 		require.NoError(t, err)
 	}()
@@ -295,7 +298,7 @@ func TestServer_On(t *testing.T) {
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, _, err := ws.Dial(context.Background(), u.String())
 	require.NoError(t, err)
-		defer func() {
+	defer func() {
 		err := c.Close()
 		require.NoError(t, err)
 	}()
@@ -317,7 +320,7 @@ func TestServer_On(t *testing.T) {
 func TestServer_NewChannel(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-		defer func() {
+	defer func() {
 		err := wsServer.Shutdown()
 		require.NoError(t, err)
 	}()
@@ -332,7 +335,7 @@ func TestServer_NewChannel(t *testing.T) {
 func TestServer_Emit(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-		defer func() {
+	defer func() {
 		err := wsServer.Shutdown()
 		require.NoError(t, err)
 	}()
@@ -347,7 +350,9 @@ func TestServer_Emit(t *testing.T) {
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, _, err := ws.Dial(context.Background(), u.String())
 	require.NoError(t, err)
-		defer func() {
+	err = c.SetDeadline(time.Now().Add(3000 * time.Millisecond))
+	require.NoError(t, err)
+	defer func() {
 		err := c.Close()
 		require.NoError(t, err)
 	}()
@@ -355,14 +360,14 @@ func TestServer_Emit(t *testing.T) {
 	wsServer.Emit(msg.Name, msg.Body)
 
 	for {
+		mes, op, err := wsutil.ReadServerData(c)
+		require.NoError(t, err)
+		require.Equal(t, true, op.IsData())
+		require.Equal(t, messageBytes, mes, "response and request must be the same")
+
 		var message Message
-		b := make([]byte, len(messageBytes)+messagePrefix)
-		err = c.SetDeadline(time.Now().Add(1000 * time.Millisecond))
-		require.NoError(t, err)
-		_, err = c.Read(b)
-		require.NoError(t, err)
-		err = json.Unmarshal(b[messagePrefix:], &message)
-		require.Equal(t, msg, message, "response message must be the same as send (byte array)")
+		err = json.Unmarshal(mes, &message)
+		require.Equal(t, msg, message, "response message must be the same as send")
 		break
 	}
 }
@@ -396,7 +401,6 @@ func TestServerListen(t *testing.T) {
 		done <- true
 	})
 
-
 	err = ws.WriteHeader(c, ws.Header{
 		Fin:    true,
 		OpCode: ws.OpText,
@@ -425,11 +429,6 @@ func TestServerNotFound(t *testing.T) {
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, _, err := ws.Dial(context.Background(), u.String())
 	require.NoError(t, err)
-	defer func() {
-		err := c.Close()
-		require.NoError(t, err)
-	}()
-
 
 	err = ws.WriteHeader(c, ws.Header{
 		Fin:    true,
@@ -444,14 +443,15 @@ func TestServerNotFound(t *testing.T) {
 	require.Equal(t, len(msg), n)
 
 	for {
-		b := make([]byte, len(msg)+messagePrefix)
-		err = c.SetDeadline(time.Now().Add(1000 * time.Millisecond))
+		mes, op, err := wsutil.ReadServerData(c)
 		require.NoError(t, err)
-		_, err = c.Read(b)
-		require.NoError(t, err)
-		require.Equal(t, msg, b[messagePrefix:], "response message must be the same as send (byte array)")
+		require.Equal(t, true, op.IsData())
+		require.Equal(t, msg, mes, "response message must be the same as send (byte array)")
 		break
 	}
+
+	err = c.Close()
+	require.NoError(t, err)
 }
 
 func TestServerProcessMessage(t *testing.T) {

@@ -3,6 +3,7 @@ package websocket
 import (
 	"context"
 	"github.com/gobwas/ws"
+	"github.com/gobwas/ws/wsutil"
 	"github.com/stretchr/testify/require"
 	"net/url"
 	"strings"
@@ -98,17 +99,17 @@ func TestConn_Send(t *testing.T) {
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, _, err := ws.Dial(context.Background(), u.String())
 	require.NoError(t, err)
+	err = c.SetDeadline(time.Now().Add(3000 * time.Millisecond))
+	require.NoError(t, err)
 	defer func() {
 		err := c.Close()
 		require.NoError(t, err)
 	}()
 
-	b := make([]byte, len(msg)+messagePrefix)
-	err = c.SetDeadline(time.Now().Add(300 * time.Millisecond))
+	mes, op, err := wsutil.ReadServerData(c)
 	require.NoError(t, err)
-	_, err = c.Read(b)
-	require.NoError(t, err)
-	require.Equal(t, msg, b[messagePrefix:], "response and request must be the same")
+	require.Equal(t, true, op.IsData())
+	require.Equal(t, msg, mes, "response and request must be the same")
 }
 
 func TestConn_Fragment(t *testing.T) {

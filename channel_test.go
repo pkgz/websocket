@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/gobwas/ws"
+	"github.com/gobwas/ws/wsutil"
 	"github.com/stretchr/testify/require"
 	"net/url"
 	"strings"
@@ -53,7 +54,6 @@ func TestChannel_Emit(t *testing.T) {
 	require.NoError(t, err)
 
 	wsServer.OnConnect(func(c *Conn) {
-		time.Sleep(100 * time.Millisecond)
 		ch.Add(c)
 		err := ch.Emit(message.Name, message.Body)
 		require.NoError(t, err)
@@ -62,19 +62,22 @@ func TestChannel_Emit(t *testing.T) {
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, _, err := ws.Dial(context.Background(), u.String())
 	require.NoError(t, err)
+	err = c.SetDeadline(time.Now().Add(3000 * time.Millisecond))
+	require.NoError(t, err)
 	defer func() {
 		err := c.Close()
 		require.NoError(t, err)
 	}()
 
 	for {
-		var msg Message
-		b := make([]byte, len(messageBytes)+messagePrefix)
-		n, err := c.Read(b)
+		mes, op, err := wsutil.ReadServerData(c)
 		require.NoError(t, err)
-		err = json.Unmarshal(b[messagePrefix:n], &msg)
-		require.NoError(t, err)
-		require.Equal(t, message, msg, "received message must be same as send")
+		require.Equal(t, true, op.IsData())
+		require.Equal(t, messageBytes, mes, "response and request must be the same")
+
+		var message2 Message
+		err = json.Unmarshal(mes, &message2)
+		require.Equal(t, message, message2, "response message must be the same as send")
 		break
 	}
 }
