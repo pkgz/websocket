@@ -1,14 +1,16 @@
 package websocket
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/gobwas/ws"
-	"github.com/gorilla/websocket"
+	"github.com/gobwas/ws/wsutil"
 	"github.com/stretchr/testify/require"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -20,12 +22,18 @@ import (
 func TestServer_Run(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+	defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	c, _, _, err := ws.Dial(context.Background(), u.String())
 	require.NoError(t, err)
-	defer c.Close()
+	defer func() {
+		err := c.Close()
+		require.NoError(t, err)
+	}()
 
 	time.Sleep(1 * time.Millisecond)
 	require.Equal(t, 1, wsServer.Count(), "weboscket must contain only 1 connection")
@@ -34,13 +42,15 @@ func TestServer_Run(t *testing.T) {
 func TestServer_Shutdown(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	wsServer.Shutdown()
+	err := wsServer.Shutdown()
+	require.NoError(t, err)
 
 	require.Equal(t, true, wsServer.shutdown, "websocket must be shutdown")
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
-	_, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	require.Equal(t, "websocket: bad handshake", err.Error(), "websocket must reject connection")
+	_, _, _, err = ws.Dial(context.Background(), u.String())
+	require.Error(t, err)
+	require.Equal(t, "unexpected HTTP response status: 500", err.Error(), "websocket must reject connection")
 }
 
 func TestServer_Handler(t *testing.T) {
@@ -59,53 +69,78 @@ func TestServer_Handler(t *testing.T) {
 
 	ts := httptest.NewServer(r)
 	defer ts.Close()
-	defer wsServer.Shutdown()
+	defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
-	_, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	_, _, _, err := ws.Dial(context.Background(), u.String())
 	require.Error(t, err, "must be rejected upgrade")
 }
 
 func TestServer_Count(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+	defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	rand.Seed(time.Now().Unix())
 	number := rand.Intn(14-3) + 3
 
+	connections := make([]net.Conn, 0)
+
 	for i := 1; i <= number; i++ {
 		u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
-		_, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+		c, _, _, err := ws.Dial(context.Background(), u.String())
 		require.NoError(t, err)
+		connections = append(connections, c)
 	}
 
+	require.Equal(t, number, len(connections), fmt.Sprintf("weboscket must contain only %d connection", number))
 	require.Equal(t, number, wsServer.Count(), fmt.Sprintf("weboscket must contain only %d connection", number))
 }
 
 func TestServer_OnConnect(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+	defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	msg := Message{
 		Name: "TesT",
 		Body: "Hello World",
 	}
+	messageBytes, err := json.Marshal(msg)
+	require.NoError(t, err)
 
 	wsServer.OnConnect(func(c *Conn) {
-		c.Emit(msg.Name, msg.Body)
+		err := c.Emit(msg.Name, msg.Body)
+		require.NoError(t, err)
 	})
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	c, _, _, err := ws.Dial(context.Background(), u.String())
 	require.NoError(t, err)
-	defer c.Close()
+	err = c.SetDeadline(time.Now().Add(3000 * time.Millisecond))
+	require.NoError(t, err)
+	defer func() {
+		err := c.Close()
+		require.NoError(t, err)
+	}()
 
 	for {
-		var message Message
-		c.ReadJSON(&message)
+		mes, op, err := wsutil.ReadServerData(c)
+		require.NoError(t, err)
+		require.Equal(t, true, op.IsData())
+		require.Equal(t, messageBytes, mes, "response and request must be the same")
 
+		var message Message
+		err = json.Unmarshal(mes, &message)
 		require.Equal(t, msg, message, "response message must be the same as send")
 		break
 	}
@@ -114,7 +149,10 @@ func TestServer_OnConnect(t *testing.T) {
 func TestServer_OnConnect2(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+	defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	msg := []byte("Hello from byte array")
 	h := ws.Header{
@@ -124,25 +162,36 @@ func TestServer_OnConnect2(t *testing.T) {
 	}
 
 	wsServer.OnConnect(func(c *Conn) {
-		c.Write(h, msg)
+		time.Sleep(300 * time.Millisecond)
+		err := c.Write(h, msg)
+		require.NoError(t, err)
 	})
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	c, _, _, err := ws.Dial(context.Background(), u.String())
 	require.NoError(t, err)
-	defer c.Close()
+	err = c.SetDeadline(time.Now().Add(3000 * time.Millisecond))
+	require.NoError(t, err)
 
 	for {
-		_, b, _ := c.ReadMessage()
-		require.Equal(t, msg, b, "response message must be the same as send (byte array)")
+		mes, op, err := wsutil.ReadServerData(c)
+		require.NoError(t, err)
+		require.Equal(t, true, op.IsData())
+		require.Equal(t, msg, mes, "response and request must be the same")
 		break
 	}
+
+	err = c.Close()
+	require.NoError(t, err)
 }
 
 func TestServer_OnDisconnect(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+	defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 	done := make(chan bool, 1)
 
 	msg := Message{
@@ -151,20 +200,32 @@ func TestServer_OnDisconnect(t *testing.T) {
 	}
 
 	wsServer.OnDisconnect(func(c *Conn) {
-		c.Emit(msg.Name, msg.Body)
+		_ = c.Emit(msg.Name, msg.Body)
 		done <- true
 	})
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	c, _, _, err := ws.Dial(context.Background(), u.String())
 	require.NoError(t, err)
-	defer c.Close()
+	defer func() {
+		err := c.Close()
+		require.NoError(t, err)
+	}()
 
-	c.WriteControl(8, nil, time.Now().Add(30*time.Second))
+	err = ws.WriteHeader(c, ws.Header{
+		Fin:    true,
+		OpCode: ws.OpClose,
+		Masked: true,
+		Length: 0,
+	})
+	require.NoError(t, err)
 
 	for {
-		_, b, _ := c.ReadMessage()
-		require.Empty(t, b)
+		b := make([]byte, messagePrefix)
+		err = c.SetDeadline(time.Now().Add(300 * time.Millisecond))
+		require.NoError(t, err)
+		_, err = c.Read(b)
+		require.Error(t, err)
 		break
 	}
 
@@ -176,7 +237,10 @@ func TestServer_OnDisconnect(t *testing.T) {
 func TestServer_OnMessage(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+	defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	msg := []byte("Hello from byte array")
 
@@ -187,11 +251,24 @@ func TestServer_OnMessage(t *testing.T) {
 	})
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	c, _, _, err := ws.Dial(context.Background(), u.String())
 	require.NoError(t, err)
-	defer c.Close()
+	defer func() {
+		err := c.Close()
+		require.NoError(t, err)
+	}()
 
-	c.WriteMessage(1, msg)
+	err = ws.WriteHeader(c, ws.Header{
+		Fin:    true,
+		OpCode: ws.OpText,
+		Masked: true,
+		Length: int64(len(msg)),
+	})
+	require.NoError(t, err)
+
+	n, err := c.Write(msg)
+	require.NoError(t, err)
+	require.Equal(t, len(msg), n)
 
 	<-done
 }
@@ -199,12 +276,17 @@ func TestServer_OnMessage(t *testing.T) {
 func TestServer_On(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+	defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	message := Message{
 		Name: "LoL",
 		Body: "Hello World",
 	}
+	messageBytes, err := json.Marshal(message)
+	require.NoError(t, err)
 
 	done := make(chan bool, 1)
 
@@ -214,11 +296,23 @@ func TestServer_On(t *testing.T) {
 	})
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	c, _, _, err := ws.Dial(context.Background(), u.String())
 	require.NoError(t, err)
-	defer c.Close()
+	defer func() {
+		err := c.Close()
+		require.NoError(t, err)
+	}()
 
-	c.WriteJSON(message)
+	err = ws.WriteHeader(c, ws.Header{
+		Fin:    true,
+		OpCode: ws.OpText,
+		Masked: true,
+		Length: int64(len(messageBytes)),
+	})
+	require.NoError(t, err)
+	n, err := c.Write(messageBytes)
+	require.NoError(t, err)
+	require.Equal(t, len(messageBytes), n)
 
 	<-done
 }
@@ -226,7 +320,10 @@ func TestServer_On(t *testing.T) {
 func TestServer_NewChannel(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+	defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	ch := wsServer.NewChannel("test")
 	require.NotNil(t, ch, "must be channel")
@@ -238,26 +335,39 @@ func TestServer_NewChannel(t *testing.T) {
 func TestServer_Emit(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+	defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	msg := Message{
 		Name: "test",
 		Body: "Hello from emit test",
 	}
+	messageBytes, err := json.Marshal(msg)
+	require.NoError(t, err)
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	c, _, _, err := ws.Dial(context.Background(), u.String())
 	require.NoError(t, err)
-	defer c.Close()
+	err = c.SetDeadline(time.Now().Add(3000 * time.Millisecond))
+	require.NoError(t, err)
+	defer func() {
+		err := c.Close()
+		require.NoError(t, err)
+	}()
 
 	wsServer.Emit(msg.Name, msg.Body)
 
 	for {
-		_, b, _ := c.ReadMessage()
-		var res Message
-		err := json.Unmarshal(b, &res)
-		require.Nil(t, err, "error must be nil")
-		require.Equal(t, msg, res, "response message must be the same as send (byte array)")
+		mes, op, err := wsutil.ReadServerData(c)
+		require.NoError(t, err)
+		require.Equal(t, true, op.IsData())
+		require.Equal(t, messageBytes, mes, "response and request must be the same")
+
+		var message Message
+		err = json.Unmarshal(mes, &message)
+		require.Equal(t, msg, message, "response message must be the same as send")
 		break
 	}
 }
@@ -265,64 +375,122 @@ func TestServer_Emit(t *testing.T) {
 func TestServerListen(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+	defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	c, _, _, err := ws.Dial(context.Background(), u.String())
 	require.NoError(t, err, "connection must be established without error")
-	defer c.Close()
+	defer func() {
+		err := c.Close()
+		require.NoError(t, err)
+	}()
 
 	done := make(chan bool, 1)
 	message := Message{
 		Name: "echo",
 		Body: "Hello from echo",
 	}
+	messageBytes, err := json.Marshal(message)
+	require.NoError(t, err)
+
 	wsServer.On("echo", func(c *Conn, msg *Message) {
 		require.Equal(t, message, *msg, "response message must be the same as send (byte array)")
 		done <- true
 	})
-	c.WriteJSON(message)
+
+	err = ws.WriteHeader(c, ws.Header{
+		Fin:    true,
+		OpCode: ws.OpText,
+		Masked: true,
+		Length: int64(len(messageBytes)),
+	})
+	require.NoError(t, err)
+
+	n, err := c.Write(messageBytes)
+	require.NoError(t, err)
+	require.Equal(t, len(messageBytes), n)
+
 	<-done
 }
 
 func TestServerNotFound(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+	defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	msg := []byte("Hello World")
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	c, _, _, err := ws.Dial(context.Background(), u.String())
 	require.NoError(t, err)
-	defer c.Close()
 
-	c.WriteMessage(1, msg)
+	err = ws.WriteHeader(c, ws.Header{
+		Fin:    true,
+		OpCode: ws.OpText,
+		Masked: true,
+		Length: int64(len(msg)),
+	})
+	require.NoError(t, err)
+
+	n, err := c.Write(msg)
+	require.NoError(t, err)
+	require.Equal(t, len(msg), n)
 
 	for {
-		_, b, _ := c.ReadMessage()
-		require.Equal(t, msg, b, "response message must be the same as send (byte array)")
+		mes, op, err := wsutil.ReadServerData(c)
+		require.NoError(t, err)
+		require.Equal(t, true, op.IsData())
+		require.Equal(t, msg, mes, "response message must be the same as send (byte array)")
 		break
 	}
+
+	err = c.Close()
+	require.NoError(t, err)
 }
 
 func TestServerProcessMessage(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+	defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	msg := []byte("")
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	c, _, _, err := ws.Dial(context.Background(), u.String())
 	require.NoError(t, err)
-	defer c.Close()
+	defer func() {
+		err := c.Close()
+		require.NoError(t, err)
+	}()
 
-	c.WriteMessage(1, msg)
+	err = ws.WriteHeader(c, ws.Header{
+		Fin:    true,
+		OpCode: ws.OpText,
+		Masked: true,
+		Length: int64(len(msg)),
+	})
+	require.NoError(t, err)
+
+	n, err := c.Write(msg)
+	require.NoError(t, err)
+	require.Equal(t, len(msg), n)
 
 	for {
-		_, b, _ := c.ReadMessage()
-		require.Len(t, b, 0, "response length must be 0")
+		b := make([]byte, len(msg)+messagePrefix)
+		err = c.SetDeadline(time.Now().Add(1000 * time.Millisecond))
+		require.NoError(t, err)
+		_, err = c.Read(b)
+		require.NoError(t, err)
+		require.Equal(t, msg, b[messagePrefix:], "response message must be the same as send (byte array)")
 		break
 	}
 }

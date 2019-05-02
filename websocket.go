@@ -194,7 +194,7 @@ func (s *Server) Shutdown() error {
 func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 	if s.shutdown {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("websocket: server not started"))
+		_, _ = w.Write([]byte("websocket: server not started"))
 		return
 	}
 
@@ -203,7 +203,9 @@ func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("websocket: upgrade error %v", err)
 		return
 	}
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 
 	connection := &Conn{
 		conn: conn,
@@ -217,7 +219,7 @@ func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 	cipherReader := wsutil.NewCipherReader(nil, [4]byte{0, 0, 0, 0})
 
 	for {
-		header, err := ws.ReadHeader(conn)
+		header, _ := ws.ReadHeader(conn)
 		if err = ws.CheckHeader(header, state); err != nil {
 			s.delConn <- connection
 			return
@@ -232,11 +234,11 @@ func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 		case ws.OpPing:
 			header.OpCode = ws.OpPong
 			header.Masked = false
-			ws.WriteHeader(conn, header)
-			io.CopyN(conn, cipherReader, header.Length)
+			_ = ws.WriteHeader(conn, header)
+			_, _ = io.CopyN(conn, cipherReader, header.Length)
 			continue
 		case ws.OpPong:
-			io.CopyN(ioutil.Discard, conn, header.Length)
+			_, _ = io.CopyN(ioutil.Discard, conn, header.Length)
 			continue
 		case ws.OpClose:
 			utf8Fin = true

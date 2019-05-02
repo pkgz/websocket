@@ -3,7 +3,7 @@ package websocket
 import (
 	"context"
 	"github.com/gobwas/ws"
-	"github.com/gorilla/websocket"
+	"github.com/gobwas/ws/wsutil"
 	"github.com/stretchr/testify/require"
 	"net/url"
 	"strings"
@@ -11,18 +11,24 @@ import (
 	"time"
 )
 
+const messagePrefix = 2
+
 func TestConn_Ping(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+	defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	ctx := context.Background()
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, _, err := ws.Dial(ctx, u.String())
-	if err != nil {
-		t.Fatal("dial:", err)
-	}
-	defer c.Close()
+	require.NoError(t, err)
+	defer func() {
+		err := c.Close()
+		require.NoError(t, err)
+	}()
 
 	m := []byte("ping")
 	h := ws.Header{
@@ -31,27 +37,34 @@ func TestConn_Ping(t *testing.T) {
 		Masked: true,
 		Length: int64(len(m)),
 	}
-	ws.WriteHeader(c, h)
+	err = ws.WriteHeader(c, h)
+	require.NoError(t, err)
 	_, err = c.Write(m)
+	require.NoError(t, err)
 
 	time.Sleep(1 * time.Millisecond)
 	resp := make([]byte, len(m)+2)
-	c.Read(resp)
+	_, err = c.Read(resp)
+	require.NoError(t, err)
 	require.Equal(t, m, resp[2:], "response and request must be the same")
 }
 
 func TestConn_Pong(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+	defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	ctx := context.Background()
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, _, err := ws.Dial(ctx, u.String())
-	if err != nil {
-		t.Fatal("dial:", err)
-	}
-	defer c.Close()
+	require.NoError(t, err)
+	defer func() {
+		err := c.Close()
+		require.NoError(t, err)
+	}()
 
 	m := []byte("pong")
 	h := ws.Header{
@@ -60,8 +73,10 @@ func TestConn_Pong(t *testing.T) {
 		Masked: true,
 		Length: int64(len(m)),
 	}
-	ws.WriteHeader(c, h)
+	err = ws.WriteHeader(c, h)
+	require.NoError(t, err)
 	_, err = c.Write(m)
+	require.NoError(t, err)
 
 	time.Sleep(1 * time.Millisecond)
 	require.NoError(t, err)
@@ -70,38 +85,49 @@ func TestConn_Pong(t *testing.T) {
 func TestConn_Send(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+	defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
-	msg := "ping"
+	msg := []byte{0, 1, 2, 3, 4, 5, 6, 7}
 	wsServer.OnConnect(func(c *Conn) {
-		c.Send(msg)
+		err := c.Send(msg)
+		require.NoError(t, err)
 	})
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	if err != nil {
-		t.Fatal("dial:", err)
-	}
-	defer c.Close()
+	c, _, _, err := ws.Dial(context.Background(), u.String())
+	require.NoError(t, err)
+	err = c.SetDeadline(time.Now().Add(3000 * time.Millisecond))
+	require.NoError(t, err)
+	defer func() {
+		err := c.Close()
+		require.NoError(t, err)
+	}()
 
-	var m interface{}
-	c.ReadJSON(&m)
-
-	require.Equal(t, msg, m, "response and request must be the same")
+	mes, op, err := wsutil.ReadServerData(c)
+	require.NoError(t, err)
+	require.Equal(t, true, op.IsData())
+	require.Equal(t, msg, mes, "response and request must be the same")
 }
 
 func TestConn_Fragment(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
-	defer wsServer.Shutdown()
+	defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
 
 	ctx := context.Background()
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, _, err := ws.Dial(ctx, u.String())
-	if err != nil {
-		t.Fatal("dial:", err)
-	}
-	defer c.Close()
+	require.NoError(t, err)
+	defer func() {
+		err := c.Close()
+		require.NoError(t, err)
+	}()
 
 	m0 := []byte("something")
 	h := ws.Header{
@@ -110,8 +136,10 @@ func TestConn_Fragment(t *testing.T) {
 		Masked: true,
 		Length: int64(len(m0)),
 	}
-	ws.WriteHeader(c, h)
+	err = ws.WriteHeader(c, h)
+	require.NoError(t, err)
 	_, err = c.Write(m0)
+	require.NoError(t, err)
 
 	m := []byte("nothing")
 	h = ws.Header{
@@ -120,12 +148,15 @@ func TestConn_Fragment(t *testing.T) {
 		Masked: true,
 		Length: 0,
 	}
-	ws.WriteHeader(c, h)
+	err = ws.WriteHeader(c, h)
+	require.NoError(t, err)
 	_, err = c.Write(m)
+	require.NoError(t, err)
 
 	time.Sleep(1 * time.Millisecond)
 
 	resp := make([]byte, len(m0)+2)
-	c.Read(resp)
+	_, err = c.Read(resp)
+	require.NoError(t, err)
 	require.Equal(t, m0, resp[2:], "response and request must be the same")
 }

@@ -5,13 +5,13 @@
 
 Simple websocket library for golang
 
-# Installation
+## Installation
 ```bash
 go get github.com/exelban/websocket
 ```
 
-# Example
-## Echo
+## Example
+### Echo
 ```golang
 package main
 
@@ -34,7 +34,7 @@ func main () {
 }
 ```
 
-## Channel
+### Channel
 ```golang
 package main
 
@@ -60,7 +60,7 @@ func main () {
 }
 ```
 
-## HelloWorld
+### HelloWorld
 ```golang
 package main
 
@@ -84,8 +84,8 @@ func main () {
 }
 ```
 
-# Benchmark
-## Autobahn
+## Benchmark
+### Autobahn
 All tests was runned by [Autobahn WebSocket Testsuite](https://crossbar.io/autobahn/) v0.8.0/v0.10.9.
 Results:
 
@@ -104,5 +104,17 @@ Results:
 **13** | **WebSocket Compression (different parameters)** | **Unimplemented**
 
 
-# Licence
+## What's new
+### v1.1.0
+    - moved from dep to go mod
+    - removed gorilla package
+    - small fixes in package and in tests
+    
+### v1.0.1
+    - small fixes
+    
+### v1.0
+    - first release
+
+## Licence
 [MIT License](https://github.com/exelban/websocket/blob/master/LICENSE)
