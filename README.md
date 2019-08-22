@@ -103,18 +103,5 @@ Results:
 **12** | **WebSocket Compression (different payloads)** | **Unimplemented**
 **13** | **WebSocket Compression (different parameters)** | **Unimplemented**
 
-
-## What's new
-### v1.1.0
-    - moved from dep to go mod
-    - removed gorilla package
-    - small fixes in package and in tests
-    
-### v1.0.1
-    - small fixes
-    
-### v1.0
-    - first release
-
 ## Licence
 [MIT License](https://github.com/exelban/websocket/blob/master/LICENSE)
