@@ -1,4 +1,4 @@
-module github.com/exelban/websocket
+module github.com/pkgz/websocket
 
 go 1.12
 
