@@ -16,21 +16,22 @@ go get github.com/pkgz/websocket
 package main
 
 import (
+	"context"
 	"github.com/pkgz/websocket"
-	"github.com/go-chi/chi"
 	"net/http"
 )
 
-func main () {
-	r := chi.NewRouter()
+func main() {
 	wsServer := websocket.Start(context.Background())
 
-	r.Get("/ws", wsServer.Handler)
+	r := http.NewServeMux()
+	r.HandleFunc("/ws", wsServer.Handler)
+
 	wsServer.On("echo", func(c *websocket.Conn, msg *websocket.Message) {
-		c.Emit("echo", msg.Body)
+		_ = c.Emit("echo", msg.Body)
 	})
 
-	http.ListenAndServe(":8080", r)
+	_ = http.ListenAndServe(":9001", r)
 }
 ```
 
@@ -39,43 +40,43 @@ func main () {
 package main
 
 import (
+	"context"
 	"github.com/pkgz/websocket"
-	"github.com/go-chi/chi"
 	"net/http"
 )
 
-func main () {
-	r := chi.NewRouter()
+func main() {
 	wsServer := websocket.Start(context.Background())
 
-	ch := wsServer.NewChannel("test")
+	r := http.NewServeMux()
+	r.HandleFunc("/ws", wsServer.Handler)
 
+	ch := wsServer.NewChannel("test")
 	wsServer.OnConnect(func(c *websocket.Conn) {
 		ch.Add(c)
 		ch.Emit("connection", "new connection come")
 	})
 
-	r.Get("/ws", wsServer.Handler)
-	http.ListenAndServe(":8080", r)
+	_ = http.ListenAndServe(":9001", r)
 }
 ```
 
-### HelloWorld
+### Hello World
 ```golang
 package main
 
 import (
+	"context"
 	"github.com/pkgz/websocket"
-	"github.com/go-chi/chi"
 	"github.com/gobwas/ws"
 	"net/http"
 )
 
 func main () {
-	r := chi.NewRouter()
+	r := http.NewServeMux()
 	wsServer := websocket.Start(context.Background())
 
-	r.Get("/ws", wsServer.Handler)
+	r.HandleFunc("/ws", wsServer.Handler)
 	wsServer.OnMessage(func(c *websocket.Conn, h ws.Header, b []byte) {
 		c.Send("Hello World")
 	})
