@@ -1,13 +1,13 @@
 # websocket
-[![GoDoc](http://img.shields.io/badge/go-documentation-blue.svg?style=flat-square)](http://godoc.org/github.com/exelban/websocket)
-[![Go Report Card](https://goreportcard.com/badge/github.com/exelban/websocket)](https://goreportcard.com/report/github.com/exelban/websocket)
-[![codecov](https://codecov.io/gh/exelban/websocket/branch/master/graph/badge.svg)](https://codecov.io/gh/exelban/websocket)
+[![GoDoc](http://img.shields.io/badge/go-documentation-blue.svg?style=flat-square)](http://godoc.org/github.com/pkgz/websocket)
+[![Go Report Card](https://goreportcard.com/badge/github.com/pkgz/websocket)](https://goreportcard.com/report/github.com/pkgz/websocket)
+[![codecov](https://codecov.io/gh/pkgz/websocket/branch/master/graph/badge.svg)](https://codecov.io/gh/pkgz/websocket)
 
 Simple websocket library for golang
 
 ## Installation
 ```bash
-go get github.com/exelban/websocket
+go get github.com/pkgz/websocket
 ```
 
 ## Example
@@ -16,14 +16,14 @@ go get github.com/exelban/websocket
 package main
 
 import (
-	"github.com/exelban/websocket"
+	"github.com/pkgz/websocket"
 	"github.com/go-chi/chi"
 	"net/http"
 )
 
 func main () {
 	r := chi.NewRouter()
-	wsServer := websocket.CreateAndRun()
+	wsServer := websocket.Start(context.Background())
 
 	r.Get("/ws", wsServer.Handler)
 	wsServer.On("echo", func(c *websocket.Conn, msg *websocket.Message) {
@@ -39,14 +39,14 @@ func main () {
 package main
 
 import (
-	"github.com/exelban/websocket"
+	"github.com/pkgz/websocket"
 	"github.com/go-chi/chi"
 	"net/http"
 )
 
 func main () {
 	r := chi.NewRouter()
-	wsServer := websocket.CreateAndRun()
+	wsServer := websocket.Start(context.Background())
 
 	ch := wsServer.NewChannel("test")
 
@@ -65,7 +65,7 @@ func main () {
 package main
 
 import (
-	"github.com/exelban/websocket"
+	"github.com/pkgz/websocket"
 	"github.com/go-chi/chi"
 	"github.com/gobwas/ws"
 	"net/http"
@@ -73,7 +73,7 @@ import (
 
 func main () {
 	r := chi.NewRouter()
-	wsServer := websocket.CreateAndRun()
+	wsServer := websocket.Start(context.Background())
 
 	r.Get("/ws", wsServer.Handler)
 	wsServer.OnMessage(func(c *websocket.Conn, h ws.Header, b []byte) {
@@ -104,4 +104,4 @@ Results:
 **13** | **WebSocket Compression (different parameters)** | **Unimplemented**
 
 ## Licence
-[MIT License](https://github.com/exelban/websocket/blob/master/LICENSE)
+[MIT License](https://github.com/pkgz/websocket/blob/master/LICENSE)

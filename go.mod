@@ -10,5 +10,5 @@ require (
 	github.com/gobwas/ws v1.0.0
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/stretchr/testify v1.2.2
-	golang.org/x/sys v0.0.0-20181011152604-fa43e7bc11ba // indirect
+	golang.org/x/net v0.0.0-20191209160850-c0dbc17a3553 // indirect
 )

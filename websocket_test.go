@@ -42,19 +42,31 @@ func TestServer_Run(t *testing.T) {
 func TestServer_Shutdown(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
+
 	err := wsServer.Shutdown()
 	require.NoError(t, err)
 
-	require.Equal(t, true, wsServer.shutdown, "websocket must be shutdown")
+	require.Equal(t, true, wsServer.IsClosed(), "websocket must be closed")
+}
 
-	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
-	_, _, _, err = ws.Dial(context.Background(), u.String())
-	require.Error(t, err)
-	require.Equal(t, "unexpected HTTP response status: 500", err.Error(), "websocket must reject connection")
+func TestServer_Shutdown_byContext(t *testing.T) {
+	ctx := context.Background()
+	ctxWithCancel, cancel := context.WithCancel(ctx)
+
+	wsServer := Start(ctxWithCancel)
+	r := chi.NewRouter()
+	r.Get("/ws", wsServer.Handler)
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	cancel()
+	time.Sleep(10 * time.Millisecond)
+
+	require.Equal(t, true, wsServer.IsClosed(), "websocket must be closed")
 }
 
 func TestServer_Handler(t *testing.T) {
-	wsServer := CreateAndRun()
+	wsServer := Start(context.Background())
 	r := chi.NewRouter()
 
 	r.Use(middleware.Compress(6, "gzip"))
@@ -496,7 +508,7 @@ func TestServerProcessMessage(t *testing.T) {
 }
 
 func wsServer() (*httptest.Server, *Server) {
-	wsServer := CreateAndRun()
+	wsServer := Start(context.Background())
 	r := chi.NewRouter()
 
 	r.Get("/ws", wsServer.Handler)

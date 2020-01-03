@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"github.com/stretchr/testify/require"
@@ -82,7 +83,7 @@ func TestConn_Pong(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestConn_Send(t *testing.T) {
+func TestConn_Send_bytes(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
 	defer func() {
@@ -110,6 +111,44 @@ func TestConn_Send(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, true, op.IsData())
 	require.Equal(t, msg, mes, "response and request must be the same")
+}
+
+func TestConn_Send_struct(t *testing.T) {
+	ts, wsServer := wsServer()
+	defer ts.Close()
+	defer func() {
+		err := wsServer.Shutdown()
+		require.NoError(t, err)
+	}()
+
+	msg := struct {
+		Value string `json:"value"`
+	}{
+		Value: "test",
+	}
+	wsServer.OnConnect(func(c *Conn) {
+		err := c.Send(msg)
+		require.NoError(t, err)
+	})
+
+	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
+	c, _, _, err := ws.Dial(context.Background(), u.String())
+	require.NoError(t, err)
+	err = c.SetDeadline(time.Now().Add(3000 * time.Millisecond))
+	require.NoError(t, err)
+	defer func() {
+		err := c.Close()
+		require.NoError(t, err)
+	}()
+
+	mes, op, err := wsutil.ReadServerData(c)
+	require.NoError(t, err)
+	require.Equal(t, true, op.IsData())
+
+	b, err := json.Marshal(msg)
+	require.NoError(t, err)
+
+	require.Equal(t, b, mes, "response and request must be the same")
 }
 
 func TestConn_Fragment(t *testing.T) {

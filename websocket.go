@@ -6,14 +6,14 @@ Echo server:
 	package main
 
 	import (
-		"github.com/exelban/websocket"
+		"github.com/pkgz/websocket"
 		"github.com/go-chi/chi"
 		"net/http"
 	)
 
 	func main () {
 		r := chi.NewRouter()
-		wsServer := websocket.CreateAndRun()
+		wsServer := websocket.Start(context.Background())
 
 		r.Get("/ws", wsServer.Handler)
 		wsServer.On("echo", func(c *websocket.Conn, msg *websocket.Message) {
@@ -27,14 +27,14 @@ Websocket with group:
 	package main
 
 	import (
-		"github.com/exelban/websocket"
+		"github.com/pkgz/websocket"
 		"github.com/go-chi/chi"
 		"net/http"
 	)
 
 	func main () {
 		r := chi.NewRouter()
-		wsServer := websocket.CreateAndRun()
+		wsServer := websocket.Start(context.Background())
 
 		ch := wsServer.NewChannel("test")
 
@@ -51,6 +51,7 @@ Websocket with group:
 package websocket
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
@@ -60,7 +61,6 @@ import (
 	"net/http"
 	"reflect"
 	"sync"
-	"time"
 )
 
 // Server allow to keep connection list, broadcast channel and callbacks list.
@@ -79,8 +79,8 @@ type Server struct {
 	onDisconnect func(c *Conn)
 	onMessage    func(c *Conn, h ws.Header, b []byte)
 
-	shutdown bool
-	done     chan bool
+	done   chan bool
+	closed bool
 
 	mu sync.RWMutex
 }
@@ -100,7 +100,7 @@ type Message struct {
 type HandlerFunc func(c *Conn, msg *Message)
 
 // Create a new websocket server handler with the provided options.
-func Create() *Server {
+func New() *Server {
 	srv := &Server{
 		connections: make(map[*Conn]bool),
 		channels:    make(map[string]*Channel),
@@ -109,7 +109,6 @@ func Create() *Server {
 		addConn:     make(chan *Conn),
 		delConn:     make(chan *Conn),
 		done:        make(chan bool, 1),
-		shutdown:    false,
 	}
 	srv.onMessage = func(c *Conn, h ws.Header, b []byte) {
 		_ = c.Write(h, b)
@@ -117,20 +116,20 @@ func Create() *Server {
 	return srv
 }
 
-// CreateAndRun instantly create and run websocket server.
-func CreateAndRun() *Server {
-	s := Create()
-	s.Run()
+// Start instantly create and run websocket server.
+func Start(ctx context.Context) *Server {
+	s := New()
+	s.Run(ctx)
 	return s
 }
 
 // Run start go routine which listening for channels.
-func (s *Server) Run() {
+func (s *Server) Run(ctx context.Context) {
 	go func() {
 		for {
 			select {
 			case <-s.done:
-				break
+				return
 			case msg := <-s.broadcast:
 				go func() {
 					s.mu.RLock()
@@ -158,6 +157,11 @@ func (s *Server) Run() {
 				s.mu.Lock()
 				delete(s.connections, conn)
 				s.mu.Unlock()
+			case <-ctx.Done():
+				if err := s.Shutdown(); err != nil {
+					log.Print(err)
+				}
+				return
 			}
 		}
 	}()
@@ -167,10 +171,8 @@ func (s *Server) Run() {
 // its goes throw all connection and closing it
 // and stopping all goroutines.
 func (s *Server) Shutdown() error {
-	s.shutdown = true
-
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	l := len(s.connections)
 	var wg sync.WaitGroup
@@ -186,18 +188,13 @@ func (s *Server) Shutdown() error {
 	wg.Wait()
 
 	s.done <- true
-	time.Sleep(100000 * time.Nanosecond)
+	s.closed = true
+
 	return nil
 }
 
 // Handler get upgrade connection to RFC 6455 and starting listener for it.
 func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
-	if s.shutdown {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte("websocket: server not started"))
-		return
-	}
-
 	conn, _, _, err := ws.UpgradeHTTP(r, w)
 	if err != nil {
 		log.Printf("websocket: upgrade error %v", err)
@@ -341,6 +338,13 @@ func (s *Server) Count() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.connections)
+}
+
+// IsClosed return the state of websocket server.
+func (s *Server) IsClosed() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.closed
 }
 
 func (s *Server) processMessage(c *Conn, h ws.Header, b []byte) error {
