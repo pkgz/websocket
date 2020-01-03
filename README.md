@@ -31,7 +31,7 @@ func main() {
 		_ = c.Emit("echo", msg.Body)
 	})
 
-	_ = http.ListenAndServe(":9001", r)
+	_ = http.ListenAndServe(":8080", r)
 }
 ```
 
@@ -57,7 +57,7 @@ func main() {
 		ch.Emit("connection", "new connection come")
 	})
 
-	_ = http.ListenAndServe(":9001", r)
+	_ = http.ListenAndServe(":8080", r)
 }
 ```
 
