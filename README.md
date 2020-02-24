@@ -4,7 +4,6 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/pkgz/websocket)](https://goreportcard.com/report/github.com/pkgz/websocket)
 [![Tests](https://img.shields.io/github/workflow/status/pkgz/websocket/Code%20coverage)](https://github.com/pkgz/websocket/actions)
 [![codecov](https://img.shields.io/codecov/c/gh/pkgz/websocket)](https://codecov.io/gh/pkgz/websocket)
-[![codecov](https://codecov.io/gh/pkgz/websocket/branch/master/graph/badge.svg)](https://codecov.io/gh/pkgz/websocket)
 
 Simple websocket library for golang
 
