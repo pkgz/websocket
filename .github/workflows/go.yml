@@ -1,0 +1,25 @@
+name: Code coverage
+on: [push]
+jobs:
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Set up Go
+      uses: actions/setup-go@v1
+      with:
+        go-version: 1.13
+      id: go
+
+    - uses: actions/checkout@v1
+
+    - name: Test
+      run: go test -race -coverprofile=coverage.out -covermode=atomic
+      
+    - name: codecov
+      uses: codecov/codecov-action@v1.0.0
+      with:
+        token: ${{secrets.CODECOV_TOKEN}}
+        file: ./coverage.out
