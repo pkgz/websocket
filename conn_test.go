@@ -93,6 +93,7 @@ func TestConn_Send_bytes(t *testing.T) {
 
 	msg := []byte{0, 1, 2, 3, 4, 5, 6, 7}
 	wsServer.OnConnect(func(c *Conn) {
+		time.Sleep(300 * time.Millisecond)
 		err := c.Send(msg)
 		require.NoError(t, err)
 	})
@@ -127,6 +128,7 @@ func TestConn_Send_struct(t *testing.T) {
 		Value: "test",
 	}
 	wsServer.OnConnect(func(c *Conn) {
+		time.Sleep(300 * time.Millisecond)
 		err := c.Send(msg)
 		require.NoError(t, err)
 	})

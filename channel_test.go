@@ -55,6 +55,7 @@ func TestChannel_Emit(t *testing.T) {
 
 	wsServer.OnConnect(func(c *Conn) {
 		ch.Add(c)
+		time.Sleep(300 * time.Millisecond)
 		err := ch.Emit(message.Name, message.Body)
 		require.NoError(t, err)
 	})
