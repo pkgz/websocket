@@ -131,6 +131,7 @@ func TestServer_OnConnect(t *testing.T) {
 	require.NoError(t, err)
 
 	wsServer.OnConnect(func(c *Conn) {
+		time.Sleep(300 * time.Millisecond)
 		err := c.Emit(msg.Name, msg.Body)
 		require.NoError(t, err)
 	})
@@ -212,6 +213,7 @@ func TestServer_OnDisconnect(t *testing.T) {
 	}
 
 	wsServer.OnDisconnect(func(c *Conn) {
+		time.Sleep(300 * time.Millisecond)
 		_ = c.Emit(msg.Name, msg.Body)
 		done <- true
 	})
