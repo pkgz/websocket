@@ -30,7 +30,7 @@ func main() {
 	r.HandleFunc("/ws", wsServer.Handler)
 
 	wsServer.On("echo", func(c *websocket.Conn, msg *websocket.Message) {
-		_ = c.Emit("echo", msg.Body)
+		_ = c.Emit("echo", msg.Data)
 	})
 
 	_ = http.ListenAndServe(":8080", r)

@@ -48,7 +48,7 @@ func TestChannel_Emit(t *testing.T) {
 
 	message := Message{
 		Name: "test-channel-emit",
-		Body: "message",
+		Data: "message",
 	}
 	messageBytes, err := json.Marshal(message)
 	require.NoError(t, err)
@@ -56,7 +56,7 @@ func TestChannel_Emit(t *testing.T) {
 	wsServer.OnConnect(func(c *Conn) {
 		ch.Add(c)
 		time.Sleep(300 * time.Millisecond)
-		err := ch.Emit(message.Name, message.Body)
+		err := ch.Emit(message.Name, message.Data)
 		require.NoError(t, err)
 	})
 

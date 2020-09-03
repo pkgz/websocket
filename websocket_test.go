@@ -125,14 +125,14 @@ func TestServer_OnConnect(t *testing.T) {
 
 	msg := Message{
 		Name: "TesT",
-		Body: "Hello World",
+		Data: "Hello World",
 	}
 	messageBytes, err := json.Marshal(msg)
 	require.NoError(t, err)
 
 	wsServer.OnConnect(func(c *Conn) {
 		time.Sleep(300 * time.Millisecond)
-		err := c.Emit(msg.Name, msg.Body)
+		err := c.Emit(msg.Name, msg.Data)
 		require.NoError(t, err)
 	})
 
@@ -209,12 +209,12 @@ func TestServer_OnDisconnect(t *testing.T) {
 
 	msg := Message{
 		Name: "TesT",
-		Body: []byte("Hello World"),
+		Data: []byte("Hello World"),
 	}
 
 	wsServer.OnDisconnect(func(c *Conn) {
 		time.Sleep(300 * time.Millisecond)
-		_ = c.Emit(msg.Name, msg.Body)
+		_ = c.Emit(msg.Name, msg.Data)
 		done <- true
 	})
 
@@ -297,7 +297,7 @@ func TestServer_On(t *testing.T) {
 
 	message := Message{
 		Name: "LoL",
-		Body: "Hello World",
+		Data: "Hello World",
 	}
 	messageBytes, err := json.Marshal(message)
 	require.NoError(t, err)
@@ -356,7 +356,7 @@ func TestServer_Emit(t *testing.T) {
 
 	msg := Message{
 		Name: "test",
-		Body: "Hello from emit test",
+		Data: "Hello from emit test",
 	}
 	messageBytes, err := json.Marshal(msg)
 	require.NoError(t, err)
@@ -371,7 +371,7 @@ func TestServer_Emit(t *testing.T) {
 		require.NoError(t, err)
 	}()
 
-	wsServer.Emit(msg.Name, msg.Body)
+	wsServer.Emit(msg.Name, msg.Data)
 
 	for {
 		mes, op, err := wsutil.ReadServerData(c)
@@ -405,7 +405,7 @@ func TestServerListen(t *testing.T) {
 	done := make(chan bool, 1)
 	message := Message{
 		Name: "echo",
-		Body: "Hello from echo",
+		Data: "Hello from echo",
 	}
 	messageBytes, err := json.Marshal(message)
 	require.NoError(t, err)

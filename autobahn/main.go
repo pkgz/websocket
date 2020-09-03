@@ -10,10 +10,10 @@ func main() {
 	wsServer := websocket.Start(context.Background())
 
 	r := http.NewServeMux()
-	r.HandleFunc("/ws", wsServer.Handler)
+	r.HandleFunc("/", wsServer.Handler)
 
 	wsServer.On("echo", func(c *websocket.Conn, msg *websocket.Message) {
-		_ = c.Emit("echo", msg.Body)
+		_ = c.Emit("echo", msg.Data)
 	})
 
 	_ = http.ListenAndServe(":9001", r)

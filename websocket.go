@@ -17,7 +17,7 @@ Echo server:
 
 		r.Get("/ws", wsServer.Handler)
 		wsServer.On("echo", func(c *websocket.Conn, msg *websocket.Message) {
-			c.Emit("echo", msg.Body)
+			c.Emit("echo", msg.Data)
 		})
 
 		http.ListenAndServe(":8080", r)
@@ -59,6 +59,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"reflect"
 	"sync"
 )
@@ -70,19 +71,14 @@ type Server struct {
 	broadcast   chan *Message
 	callbacks   map[string]HandlerFunc
 
-	addConn chan *Conn
-	delConn chan *Conn
-
 	delChan []chan *Conn
 
 	onConnect    func(c *Conn)
 	onDisconnect func(c *Conn)
 	onMessage    func(c *Conn, h ws.Header, b []byte)
 
-	done   chan bool
-	closed bool
-
-	mu sync.RWMutex
+	done bool
+	mu   sync.RWMutex
 }
 
 // Message is a struct for data which sending between application and clients.
@@ -90,7 +86,7 @@ type Server struct {
 // Body will be transformed to byte array and returned to callback.
 type Message struct {
 	Name string      `json:"name"`
-	Body interface{} `json:"body"`
+	Data interface{} `json:"data"`
 }
 
 // HandleFunc is a type for handle function
@@ -106,9 +102,6 @@ func New() *Server {
 		channels:    make(map[string]*Channel),
 		broadcast:   make(chan *Message),
 		callbacks:   make(map[string]HandlerFunc),
-		addConn:     make(chan *Conn),
-		delConn:     make(chan *Conn),
-		done:        make(chan bool, 1),
 	}
 	srv.onMessage = func(c *Conn, h ws.Header, b []byte) {
 		_ = c.Write(h, b)
@@ -128,35 +121,14 @@ func (s *Server) Run(ctx context.Context) {
 	go func() {
 		for {
 			select {
-			case <-s.done:
-				return
 			case msg := <-s.broadcast:
 				go func() {
 					s.mu.RLock()
 					for c := range s.connections {
-						_ = c.Emit(msg.Name, msg.Body)
+						_ = c.Emit(msg.Name, msg.Data)
 					}
 					s.mu.RUnlock()
 				}()
-			case conn := <-s.addConn:
-				if !reflect.ValueOf(s.onConnect).IsNil() {
-					go s.onConnect(conn)
-				}
-				s.mu.Lock()
-				s.connections[conn] = true
-				s.mu.Unlock()
-			case conn := <-s.delConn:
-				if !reflect.ValueOf(s.onDisconnect).IsNil() {
-					go s.onDisconnect(conn)
-				}
-				go func() {
-					for _, dC := range s.delChan {
-						dC <- conn
-					}
-				}()
-				s.mu.Lock()
-				delete(s.connections, conn)
-				s.mu.Unlock()
 			case <-ctx.Done():
 				if err := s.Shutdown(); err != nil {
 					log.Print(err)
@@ -187,14 +159,14 @@ func (s *Server) Shutdown() error {
 
 	wg.Wait()
 
-	s.done <- true
-	s.closed = true
-
+	s.done = true
 	return nil
 }
 
 // Handler get upgrade connection to RFC 6455 and starting listener for it.
 func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
+	var params url.Values = nil
+
 	conn, _, _, err := ws.UpgradeHTTP(r, w)
 	if err != nil {
 		log.Printf("websocket: upgrade error %v", err)
@@ -204,10 +176,21 @@ func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close()
 	}()
 
-	connection := &Conn{
-		conn: conn,
+	if r.URL.RawQuery != "" {
+		params, err = url.ParseQuery(r.URL.RawQuery)
+		if err != nil {
+			log.Print(err)
+			return
+		}
 	}
-	s.addConn <- connection
+
+	connection := &Conn{
+		params: params,
+		conn:   conn,
+		done:   make(chan bool, 1),
+	}
+	connection.startPing()
+	s.addConn(connection)
 
 	textPending := false
 
@@ -218,7 +201,7 @@ func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 	for {
 		header, _ := ws.ReadHeader(conn)
 		if err = ws.CheckHeader(header, state); err != nil {
-			s.delConn <- connection
+			s.dropConn(connection)
 			return
 		}
 
@@ -272,7 +255,7 @@ func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err != nil || header.OpCode == ws.OpClose {
-			s.delConn <- connection
+			s.dropConn(connection)
 			return
 		}
 
@@ -280,7 +263,7 @@ func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 		err = s.processMessage(connection, header, payload)
 		if err != nil {
 			log.Print(err)
-			s.delConn <- connection
+			s.dropConn(connection)
 			return
 		}
 	}
@@ -325,10 +308,10 @@ func (s *Server) OnMessage(f func(c *Conn, h ws.Header, b []byte)) {
 }
 
 // Emit emit message to all connections.
-func (s *Server) Emit(name string, body interface{}) {
+func (s *Server) Emit(name string, data interface{}) {
 	msg := Message{
 		Name: name,
-		Body: body,
+		Data: data,
 	}
 	s.broadcast <- &msg
 }
@@ -344,7 +327,8 @@ func (s *Server) Count() int {
 func (s *Server) IsClosed() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.closed
+
+	return s.done
 }
 
 func (s *Server) processMessage(c *Conn, h ws.Header, b []byte) error {
@@ -377,4 +361,30 @@ func (s *Server) processMessage(c *Conn, h ws.Header, b []byte) error {
 	}
 
 	return nil
+}
+
+func (s *Server) addConn(conn *Conn) {
+	if !reflect.ValueOf(s.onConnect).IsNil() {
+		go s.onConnect(conn)
+	}
+
+	s.mu.Lock()
+	s.connections[conn] = true
+	s.mu.Unlock()
+}
+
+func (s *Server) dropConn(conn *Conn) {
+	if !reflect.ValueOf(s.onDisconnect).IsNil() {
+		go s.onDisconnect(conn)
+	}
+
+	go func() {
+		for _, dC := range s.delChan {
+			dC <- conn
+		}
+	}()
+
+	s.mu.Lock()
+	delete(s.connections, conn)
+	s.mu.Unlock()
 }
