@@ -11,6 +11,7 @@ import (
 
 // Conn websocket connection
 type Conn struct {
+	id     string
 	conn   net.Conn
 	params url.Values
 	done   chan bool
@@ -25,6 +26,11 @@ var pingHeader = ws.Header{
 }
 
 var PingInterval = time.Second * 5
+
+// ID return an connection identifier (may be not unique)
+func (c *Conn) ID() string {
+	return c.id
+}
 
 // Emit emit message to connection.
 func (c *Conn) Emit(name string, data interface{}) error {
@@ -47,13 +53,15 @@ func (c *Conn) Emit(name string, data interface{}) error {
 // Write write byte array to connection.
 func (c *Conn) Write(h ws.Header, b []byte) error {
 	c.mu.Lock()
-	_ = c.conn.SetWriteDeadline(time.Now().Add(3000 * time.Millisecond))
+	defer c.mu.Unlock()
+
+	_ = c.conn.SetWriteDeadline(time.Now().Add(15000 * time.Millisecond))
 	err := ws.WriteHeader(c.conn, h)
 	if err != nil {
 		return err
 	}
+
 	_, err = c.conn.Write(b)
-	c.mu.Unlock()
 	return err
 }
 

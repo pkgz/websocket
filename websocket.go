@@ -52,7 +52,9 @@ package websocket
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
+	"fmt"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"io"
@@ -185,6 +187,7 @@ func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	connection := &Conn{
+		id:     uuid(),
 		params: params,
 		conn:   conn,
 		done:   make(chan bool, 1),
@@ -387,4 +390,11 @@ func (s *Server) dropConn(conn *Conn) {
 	s.mu.Lock()
 	delete(s.connections, conn)
 	s.mu.Unlock()
+}
+
+func uuid() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
 }
