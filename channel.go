@@ -71,3 +71,11 @@ func (c *Channel) Emit(name string, data interface{}) (err error) {
 
 	return
 }
+
+// Purge remove all connections from channel.
+func (c *Channel) Purge() {
+	c.mu.Lock()
+	c.connections = make(map[*Conn]bool)
+	c.delConn = make(chan *Conn)
+	c.mu.Unlock()
+}

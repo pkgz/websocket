@@ -282,8 +282,8 @@ func (s *Server) On(name string, f HandlerFunc) {
 
 // NewChannel create new channel and proxy channel delConn
 // for handling connection closing.
-func (s *Server) NewChannel(name string) *Channel {
-	c := newChannel(name)
+func (s *Server) NewChannel(id string) *Channel {
+	c := newChannel(id)
 	s.mu.Lock()
 	s.delChan = append(s.delChan, c.delConn)
 	s.mu.Unlock()
@@ -291,11 +291,11 @@ func (s *Server) NewChannel(name string) *Channel {
 }
 
 // Channel find and return the channel.
-func (s *Server) Channel(name string) *Channel {
+func (s *Server) Channel(id string) *Channel {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.channels[name]
+	return s.channels[id]
 }
 
 // Set function which will be called when new connections come.
@@ -328,13 +328,13 @@ func (s *Server) Emit(name string, data interface{}) {
 	s.broadcast <- &msg
 }
 
-// SendTo send message to channel.
-func (s *Server) SendTo(channel string, name string, message *Message) error {
+// SendTo send message to channel with id.
+func (s *Server) SendTo(id string, name string, message *Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.channels[channel] != nil {
-		return s.channels[channel].Emit(name, message)
+	if s.channels[id] != nil {
+		return s.channels[id].Emit(name, message)
 	}
 
 	return errors.New("no channel found")
