@@ -54,6 +54,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
@@ -289,6 +290,14 @@ func (s *Server) NewChannel(name string) *Channel {
 	return c
 }
 
+// Channel find and return the channel.
+func (s *Server) Channel(name string) *Channel {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.channels[name]
+}
+
 // Set function which will be called when new connections come.
 func (s *Server) OnConnect(f func(c *Conn)) {
 	s.mu.Lock()
@@ -317,6 +326,18 @@ func (s *Server) Emit(name string, data interface{}) {
 		Data: data,
 	}
 	s.broadcast <- &msg
+}
+
+// SendTo send message to channel.
+func (s *Server) SendTo(channel string, name string, message *Message) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.channels[channel] != nil {
+		return s.channels[channel].Emit(name, message)
+	}
+
+	return errors.New("no channel found")
 }
 
 // Count return number of active connections.
