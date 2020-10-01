@@ -285,6 +285,7 @@ func (s *Server) On(name string, f HandlerFunc) {
 func (s *Server) NewChannel(id string) *Channel {
 	c := newChannel(id)
 	s.mu.Lock()
+	s.channels[id] = c
 	s.delChan = append(s.delChan, c.delConn)
 	s.mu.Unlock()
 	return c
