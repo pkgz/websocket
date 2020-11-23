@@ -300,10 +300,11 @@ func (s *Server) Channel(id string) *Channel {
 }
 
 // Count return channels id with live connections.
-func (s *Server) Channels() (list []string) {
+func (s *Server) Channels() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	list := []string{}
 	for _, c := range s.channels {
 		c.mu.Lock()
 		if len(c.connections) != 0 {
@@ -312,7 +313,7 @@ func (s *Server) Channels() (list []string) {
 		c.mu.Unlock()
 	}
 
-	return
+	return list
 }
 
 // Set function which will be called when new connections come.
