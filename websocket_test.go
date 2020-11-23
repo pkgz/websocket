@@ -386,6 +386,14 @@ func TestServer_Emit(t *testing.T) {
 	}
 }
 
+func TestServer_Channel(t *testing.T) {
+	// TODO
+}
+
+func TestServer_Channels(t *testing.T) {
+	// TODO
+}
+
 func TestServerListen(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()

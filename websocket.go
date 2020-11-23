@@ -299,6 +299,22 @@ func (s *Server) Channel(id string) *Channel {
 	return s.channels[id]
 }
 
+// Count return channels id with live connections.
+func (s *Server) Channels() (list []string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, c := range s.channels {
+		c.mu.Lock()
+		if len(c.connections) != 0 {
+			list = append(list, c.id)
+		}
+		c.mu.Unlock()
+	}
+
+	return
+}
+
 // Set function which will be called when new connections come.
 func (s *Server) OnConnect(f func(c *Conn)) {
 	s.mu.Lock()
