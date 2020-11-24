@@ -34,11 +34,19 @@ func newChannel(id string) *Channel {
 	return &c
 }
 
-// Count return number of connections in channel.
+// Count return number of live connections in channel.
 func (c *Channel) Count() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return len(c.connections)
+
+	count := 0
+	for con := range c.connections {
+		if con.conn != nil {
+			count++
+		}
+	}
+
+	return count
 }
 
 // ID return channel id.

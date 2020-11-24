@@ -89,7 +89,11 @@ func (c *Conn) Send(data interface{}) error {
 // Close closing websocket connection.
 func (c *Conn) Close() error {
 	c.done <- true
-	return c.conn.Close()
+
+	err := c.conn.Close()
+	c.conn = nil
+
+	return err
 }
 
 // Param gets the value from url params.
