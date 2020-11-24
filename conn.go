@@ -89,9 +89,7 @@ func (c *Conn) Send(data interface{}) error {
 // Close closing websocket connection.
 func (c *Conn) Close() error {
 	c.done <- true
-
-	err := c.conn.Close()
-	return err
+	return c.conn.Close()
 }
 
 // Param gets the value from url params.
@@ -109,7 +107,9 @@ func (c *Conn) startPing() {
 		for {
 			select {
 			case <-ticker.C:
-				_ = ws.WriteHeader(c.conn, pingHeader)
+				if err := ws.WriteHeader(c.conn, pingHeader); err != nil {
+					_ = c.Close()
+				}
 			case <-c.done:
 				ticker.Stop()
 				return

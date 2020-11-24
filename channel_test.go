@@ -56,8 +56,7 @@ func TestChannel_Emit(t *testing.T) {
 	wsServer.OnConnect(func(c *Conn) {
 		ch.Add(c)
 		time.Sleep(300 * time.Millisecond)
-		err := ch.Emit(message.Name, message.Data)
-		require.NoError(t, err)
+		ch.Emit(message.Name, message.Data)
 	})
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}

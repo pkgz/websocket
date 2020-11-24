@@ -351,8 +351,9 @@ func (s *Server) SendTo(id string, name string, message *Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.channels[id] != nil {
-		return s.channels[id].Emit(name, message)
+	ch := s.Channel(id)
+	if ch != nil {
+		ch.Emit(name, message)
 	}
 
 	return errors.New("no channel found")

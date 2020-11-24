@@ -61,15 +61,16 @@ func (c *Channel) Remove(conn *Conn) {
 }
 
 // Emit emits message to all connections in channel.
-func (c *Channel) Emit(name string, data interface{}) (err error) {
+func (c *Channel) Emit(name string, data interface{}) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	for con := range c.connections {
-		err = con.Emit(name, data)
+		if err := con.Emit(name, data); err != nil {
+			_ = con.Close()
+			c.Remove(con)
+		}
 	}
-
-	return
 }
 
 // Purge remove all connections from channel.
