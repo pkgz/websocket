@@ -34,10 +34,14 @@ func (c *Conn) ID() string {
 
 // Emit emit message to connection.
 func (c *Conn) Emit(name string, data interface{}) error {
-	msg := Message{
+	var msg = struct {
+		Name string      `json:"name"`
+		Data interface{} `json:"data"`
+	}{
 		Name: name,
 		Data: data,
 	}
+
 	b, _ := json.Marshal(msg)
 
 	h := ws.Header{

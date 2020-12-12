@@ -71,7 +71,7 @@ import (
 type Server struct {
 	connections map[*Conn]bool
 	channels    map[string]*Channel
-	broadcast   chan *Message
+	broadcast   chan Message
 	callbacks   map[string]HandlerFunc
 
 	delChan []chan *Conn
@@ -88,8 +88,8 @@ type Server struct {
 // Name using for matching callback function in On function.
 // Body will be transformed to byte array and returned to callback.
 type Message struct {
-	Name string      `json:"name"`
-	Data interface{} `json:"data"`
+	Name string `json:"name"`
+	Data []byte `json:"data"`
 }
 
 // HandleFunc is a type for handle function
@@ -103,7 +103,7 @@ func New() *Server {
 	srv := &Server{
 		connections: make(map[*Conn]bool),
 		channels:    make(map[string]*Channel),
-		broadcast:   make(chan *Message),
+		broadcast:   make(chan Message),
 		callbacks:   make(map[string]HandlerFunc),
 	}
 	srv.onMessage = func(c *Conn, h ws.Header, b []byte) {
@@ -338,12 +338,11 @@ func (s *Server) OnMessage(f func(c *Conn, h ws.Header, b []byte)) {
 }
 
 // Emit emit message to all connections.
-func (s *Server) Emit(name string, data interface{}) {
-	msg := Message{
+func (s *Server) Emit(name string, data []byte) {
+	s.broadcast <- Message{
 		Name: name,
 		Data: data,
 	}
-	s.broadcast <- &msg
 }
 
 // SendTo send message to channel with id.
@@ -388,10 +387,10 @@ func (s *Server) processMessage(c *Conn, h ws.Header, b []byte) error {
 	case ws.OpText:
 		switch b[0] {
 		case 123:
-			err := json.Unmarshal(b, &msg)
-			if err != nil {
+			if err := json.Unmarshal(b, &msg); err != nil {
 				return err
 			}
+
 			if s.callbacks[msg.Name] != nil {
 				s.callbacks[msg.Name](c, &msg)
 			}

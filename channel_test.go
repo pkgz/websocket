@@ -16,8 +16,7 @@ func TestChannel_Add(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
 	defer func() {
-		err := wsServer.Shutdown()
-		require.NoError(t, err)
+		require.NoError(t, wsServer.Shutdown())
 	}()
 
 	ch := wsServer.NewChannel("test-channel-add")
@@ -31,8 +30,7 @@ func TestChannel_Add(t *testing.T) {
 	c, _, _, err := ws.Dial(context.Background(), u.String())
 	require.NoError(t, err)
 	defer func() {
-		err := c.Close()
-		require.NoError(t, err)
+		require.NoError(t, c.Close())
 	}()
 }
 
@@ -46,17 +44,17 @@ func TestChannel_Emit(t *testing.T) {
 
 	ch := wsServer.NewChannel("test-channel-emit")
 
-	message := Message{
+	_message := Message{
 		Name: "test-channel-emit",
-		Data: "message",
+		Data: []byte("message"),
 	}
-	messageBytes, err := json.Marshal(message)
+	messageBytes, err := json.Marshal(_message)
 	require.NoError(t, err)
 
 	wsServer.OnConnect(func(c *Conn) {
 		ch.Add(c)
 		time.Sleep(300 * time.Millisecond)
-		ch.Emit(message.Name, message.Data)
+		ch.Emit(_message.Name, _message.Data)
 	})
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
@@ -65,8 +63,7 @@ func TestChannel_Emit(t *testing.T) {
 	err = c.SetDeadline(time.Now().Add(3000 * time.Millisecond))
 	require.NoError(t, err)
 	defer func() {
-		err := c.Close()
-		require.NoError(t, err)
+		require.NoError(t, c.Close())
 	}()
 
 	for {
@@ -75,9 +72,9 @@ func TestChannel_Emit(t *testing.T) {
 		require.Equal(t, true, op.IsData())
 		require.Equal(t, messageBytes, mes, "response and request must be the same")
 
-		var message2 Message
-		err = json.Unmarshal(mes, &message2)
-		require.Equal(t, message, message2, "response message must be the same as send")
+		var msg Message
+		require.NoError(t, json.Unmarshal(mes, &msg))
+		require.Equal(t, _message, msg, "response message must be the same as send")
 		break
 	}
 }
@@ -86,8 +83,7 @@ func TestChannel_Remove(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
 	defer func() {
-		err := wsServer.Shutdown()
-		require.NoError(t, err)
+		require.NoError(t, wsServer.Shutdown())
 	}()
 
 	ch := wsServer.NewChannel("test-channel-add")
@@ -103,8 +99,7 @@ func TestChannel_Remove(t *testing.T) {
 	c, _, _, err := ws.Dial(context.Background(), u.String())
 	require.NoError(t, err)
 	defer func() {
-		err := c.Close()
-		require.NoError(t, err)
+		require.NoError(t, c.Close())
 	}()
 }
 
@@ -112,8 +107,7 @@ func TestChannel_Id(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
 	defer func() {
-		err := wsServer.Shutdown()
-		require.NoError(t, err)
+		require.NoError(t, wsServer.Shutdown())
 	}()
 
 	ch := wsServer.NewChannel("test-channel-id")
