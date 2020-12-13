@@ -294,87 +294,52 @@ func TestServer_On(t *testing.T) {
 		require.NoError(t, wsServer.Shutdown())
 	}()
 
-	t.Run("string data", func(t *testing.T) {
-		_message := Message{
-			Name: "LoL",
-			Data: []byte("Hello World"),
-		}
-		messageBytes, err := json.Marshal(_message)
-		require.NoError(t, err)
+	type dataStruct struct {
+		Test string `json:"test"`
+	}
+	var data = dataStruct{
+		Test: "test",
+	}
+	_message := struct {
+		Name string      `json:"name"`
+		Data interface{} `json:"data"`
+	}{
+		Name: "LoL",
+		Data: data,
+	}
 
-		done := make(chan bool, 1)
+	messageBytes, err := json.Marshal(_message)
+	require.NoError(t, err)
 
-		wsServer.On("LoL", func(c *Conn, msg *Message) {
-			require.Equal(t, _message.Name, msg.Name)
-			require.Equal(t, _message.Data, msg.Data)
-			done <- true
-		})
+	done := make(chan bool, 1)
 
-		u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
-		c, _, _, err := ws.Dial(context.Background(), u.String())
-		require.NoError(t, err)
-		defer func() {
-			require.NoError(t, c.Close())
-		}()
-
-		err = ws.WriteHeader(c, ws.Header{
-			Fin:    true,
-			OpCode: ws.OpText,
-			Masked: true,
-			Length: int64(len(messageBytes)),
-		})
-		require.NoError(t, err)
-		n, err := c.Write(messageBytes)
-		require.NoError(t, err)
-		require.Equal(t, len(messageBytes), n)
-
-		<-done
+	wsServer.On("LoL", func(c *Conn, msg *Message) {
+		require.Equal(t, _message.Name, msg.Name)
+		var respData dataStruct
+		require.NoError(t, json.Unmarshal(msg.Data, &respData))
+		require.Equal(t, _message.Data, respData)
+		done <- true
 	})
 
-	t.Run("struct data", func(t *testing.T) {
-		var data = struct {
-			Test string `json:"test"`
-		}{
-			Test: "test",
-		}
-		b, err := json.Marshal(data)
-		require.NoError(t, err)
+	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
+	c, _, _, err := ws.Dial(context.Background(), u.String())
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, c.Close())
+	}()
 
-		_message := Message{
-			Name: "LoL",
-			Data: b,
-		}
-		messageBytes, err := json.Marshal(_message)
-		require.NoError(t, err)
-
-		done := make(chan bool, 1)
-
-		wsServer.On("LoL", func(c *Conn, msg *Message) {
-			require.Equal(t, _message.Name, msg.Name)
-			require.Equal(t, _message.Data, msg.Data)
-			done <- true
-		})
-
-		u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
-		c, _, _, err := ws.Dial(context.Background(), u.String())
-		require.NoError(t, err)
-		defer func() {
-			require.NoError(t, c.Close())
-		}()
-
-		err = ws.WriteHeader(c, ws.Header{
-			Fin:    true,
-			OpCode: ws.OpText,
-			Masked: true,
-			Length: int64(len(messageBytes)),
-		})
-		require.NoError(t, err)
-		n, err := c.Write(messageBytes)
-		require.NoError(t, err)
-		require.Equal(t, len(messageBytes), n)
-
-		<-done
+	err = ws.WriteHeader(c, ws.Header{
+		Fin:    true,
+		OpCode: ws.OpText,
+		Masked: true,
+		Length: int64(len(messageBytes)),
 	})
+	require.NoError(t, err)
+	n, err := c.Write(messageBytes)
+	require.NoError(t, err)
+	require.Equal(t, len(messageBytes), n)
+
+	<-done
 }
 
 func TestServer_NewChannel(t *testing.T) {
@@ -444,28 +409,33 @@ func TestServerListen(t *testing.T) {
 	ts, wsServer := wsServer()
 	defer ts.Close()
 	defer func() {
-		err := wsServer.Shutdown()
-		require.NoError(t, err)
+		require.NoError(t, wsServer.Shutdown())
 	}()
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, _, err := ws.Dial(context.Background(), u.String())
 	require.NoError(t, err, "connection must be established without error")
 	defer func() {
-		err := c.Close()
-		require.NoError(t, err)
+		require.NoError(t, c.Close())
 	}()
 
 	done := make(chan bool, 1)
-	message := Message{
+
+	message := struct {
+		Name string      `json:"name"`
+		Data interface{} `json:"data"`
+	}{
 		Name: "echo",
-		Data: []byte("Hello from echo"),
+		Data: "Hello from echo",
 	}
 	messageBytes, err := json.Marshal(message)
 	require.NoError(t, err)
 
 	wsServer.On("echo", func(c *Conn, msg *Message) {
-		require.Equal(t, message, *msg, "response message must be the same as send (byte array)")
+		require.Equal(t, message.Name, msg.Name)
+		var respData string
+		require.NoError(t, json.Unmarshal(msg.Data, &respData))
+		require.Equal(t, message.Data, respData)
 		done <- true
 	})
 

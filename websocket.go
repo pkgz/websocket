@@ -264,8 +264,7 @@ func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		header.Masked = false
-		err = s.processMessage(connection, header, payload)
-		if err != nil {
+		if err = s.processMessage(connection, header, payload); err != nil {
 			log.Print(err)
 			s.dropConn(connection)
 			return
@@ -374,7 +373,10 @@ func (s *Server) IsClosed() bool {
 }
 
 func (s *Server) processMessage(c *Conn, h ws.Header, b []byte) error {
-	var msg Message
+	var msg struct {
+		Name string      `json:"name"`
+		Data interface{} `json:"data"`
+	}
 
 	if len(b) == 0 {
 		s.onMessage(c, h, b)
@@ -392,7 +394,17 @@ func (s *Server) processMessage(c *Conn, h ws.Header, b []byte) error {
 			}
 
 			if s.callbacks[msg.Name] != nil {
-				s.callbacks[msg.Name](c, &msg)
+				buf, err := json.Marshal(msg.Data)
+				if err != nil {
+					return err
+				}
+
+				s.callbacks[msg.Name](c, &Message{
+					Name: msg.Name,
+					Data: buf,
+				})
+			} else {
+				return fmt.Errorf("missing callback for %s", msg.Name)
 			}
 		default:
 			s.onMessage(c, h, b)
