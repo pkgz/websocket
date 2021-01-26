@@ -305,11 +305,9 @@ func (s *Server) Channels() []string {
 
 	list := []string{}
 	for _, c := range s.channels {
-		c.mu.Lock()
-		if len(c.connections) != 0 {
+		if c.Count() != 0 {
 			list = append(list, c.id)
 		}
-		c.mu.Unlock()
 	}
 
 	return list
