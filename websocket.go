@@ -155,7 +155,9 @@ func (s *Server) Shutdown() error {
 
 	for c := range s.connections {
 		go func(c *Conn) {
-			_ = c.Close()
+			if c.conn != nil {
+				_ = c.Close()
+			}
 			wg.Done()
 		}(c)
 	}

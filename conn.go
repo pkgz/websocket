@@ -115,7 +115,7 @@ func (c *Conn) startPing() {
 		for {
 			select {
 			case <-ticker.C:
-				if err := ws.WriteHeader(c.conn, pingHeader); err != nil {
+				if err := c.Write(pingHeader, nil); err != nil {
 					_ = c.Close()
 				}
 			case <-c.done:

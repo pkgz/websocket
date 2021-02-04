@@ -155,10 +155,9 @@ func TestConn_Send_struct(t *testing.T) {
 
 func TestConn_Fragment(t *testing.T) {
 	ts, wsServer := wsServer()
-	defer ts.Close()
 	defer func() {
-		err := wsServer.Shutdown()
-		require.NoError(t, err)
+		ts.Close()
+		require.NoError(t,  wsServer.Shutdown())
 	}()
 
 	ctx := context.Background()
@@ -166,35 +165,30 @@ func TestConn_Fragment(t *testing.T) {
 	c, _, _, err := ws.Dial(ctx, u.String())
 	require.NoError(t, err)
 	defer func() {
-		err := c.Close()
-		require.NoError(t, err)
+		require.NoError(t, c.Close())
 	}()
 
 	m0 := []byte("something")
-	h := ws.Header{
-		Fin:    true,
+	require.NoError(t, ws.WriteHeader(c, ws.Header{
+		Fin:    false,
 		OpCode: ws.OpText,
 		Masked: true,
 		Length: int64(len(m0)),
-	}
-	err = ws.WriteHeader(c, h)
-	require.NoError(t, err)
+	}))
 	_, err = c.Write(m0)
 	require.NoError(t, err)
 
 	m := []byte("nothing")
-	h = ws.Header{
+	require.NoError(t, ws.WriteHeader(c, ws.Header{
 		Fin:    true,
 		OpCode: ws.OpContinuation,
 		Masked: true,
-		Length: 0,
-	}
-	err = ws.WriteHeader(c, h)
-	require.NoError(t, err)
+		Length: int64(len(m)),
+	}))
 	_, err = c.Write(m)
 	require.NoError(t, err)
 
-	time.Sleep(1 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 
 	resp := make([]byte, len(m0)+2)
 	_, err = c.Read(resp)
