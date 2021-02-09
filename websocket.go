@@ -268,8 +268,6 @@ func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 		header.Masked = false
 		if err = s.processMessage(connection, header, payload); err != nil {
 			log.Print(err)
-			s.dropConn(connection)
-			return
 		}
 	}
 }
