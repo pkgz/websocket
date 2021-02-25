@@ -15,12 +15,8 @@ import (
 const messagePrefix = 2
 
 func TestConn_Ping(t *testing.T) {
-	ts, wsServer := wsServer()
-	defer ts.Close()
-	defer func() {
-		err := wsServer.Shutdown()
-		require.NoError(t, err)
-	}()
+	ts, _, shutdown := server(t)
+	defer shutdown()
 
 	ctx := context.Background()
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
@@ -51,12 +47,8 @@ func TestConn_Ping(t *testing.T) {
 }
 
 func TestConn_Pong(t *testing.T) {
-	ts, wsServer := wsServer()
-	defer ts.Close()
-	defer func() {
-		err := wsServer.Shutdown()
-		require.NoError(t, err)
-	}()
+	ts, _, shutdown := server(t)
+	defer shutdown()
 
 	ctx := context.Background()
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
@@ -84,12 +76,8 @@ func TestConn_Pong(t *testing.T) {
 }
 
 func TestConn_Send_bytes(t *testing.T) {
-	ts, wsServer := wsServer()
-	defer ts.Close()
-	defer func() {
-		err := wsServer.Shutdown()
-		require.NoError(t, err)
-	}()
+	ts, wsServer, shutdown := server(t)
+	defer shutdown()
 
 	msg := []byte{0, 1, 2, 3, 4, 5, 6, 7}
 	wsServer.OnConnect(func(c *Conn) {
@@ -115,12 +103,8 @@ func TestConn_Send_bytes(t *testing.T) {
 }
 
 func TestConn_Send_struct(t *testing.T) {
-	ts, wsServer := wsServer()
-	defer ts.Close()
-	defer func() {
-		err := wsServer.Shutdown()
-		require.NoError(t, err)
-	}()
+	ts, wsServer, shutdown := server(t)
+	defer shutdown()
 
 	msg := struct {
 		Value string `json:"value"`
@@ -139,8 +123,7 @@ func TestConn_Send_struct(t *testing.T) {
 	err = c.SetDeadline(time.Now().Add(3000 * time.Millisecond))
 	require.NoError(t, err)
 	defer func() {
-		err := c.Close()
-		require.NoError(t, err)
+		require.NoError(t, c.Close())
 	}()
 
 	mes, op, err := wsutil.ReadServerData(c)
@@ -154,11 +137,8 @@ func TestConn_Send_struct(t *testing.T) {
 }
 
 func TestConn_Fragment(t *testing.T) {
-	ts, wsServer := wsServer()
-	defer func() {
-		ts.Close()
-		require.NoError(t,  wsServer.Shutdown())
-	}()
+	ts, _, shutdown := server(t)
+	defer shutdown()
 
 	ctx := context.Background()
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
@@ -168,30 +148,39 @@ func TestConn_Fragment(t *testing.T) {
 		require.NoError(t, c.Close())
 	}()
 
-	m0 := []byte("something")
-	require.NoError(t, ws.WriteHeader(c, ws.Header{
+	m1 := []byte("hello")
+	err = ws.WriteHeader(c, ws.Header{
 		Fin:    false,
 		OpCode: ws.OpText,
 		Masked: true,
-		Length: int64(len(m0)),
-	}))
-	_, err = c.Write(m0)
+		Length: int64(len(m1)),
+	})
+	require.NoError(t, err)
+	_, err = c.Write(m1)
 	require.NoError(t, err)
 
-	m := []byte("nothing")
-	require.NoError(t, ws.WriteHeader(c, ws.Header{
+	m2 := []byte(" world")
+	err = ws.WriteHeader(c, ws.Header{
 		Fin:    true,
 		OpCode: ws.OpContinuation,
 		Masked: true,
-		Length: int64(len(m)),
-	}))
-	_, err = c.Write(m)
+		Length: int64(len(m2)),
+	})
+	require.NoError(t, err)
+	_, err = c.Write(m2)
 	require.NoError(t, err)
 
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(time.Millisecond * 10)
 
-	resp := make([]byte, len(m0)+2)
-	_, err = c.Read(resp)
+	resp := make([]byte, 128)
+	n, err := c.Read(resp)
+	resp = resp[:n]
+	final := []byte{}
+	for _, b := range resp {
+		if b != 0x1 && b != 0x5 && b != 0x6 && b != 0x80 {
+			final = append(final, b)
+		}
+	}
 	require.NoError(t, err)
-	require.Equal(t, m0, resp[2:], "response and request must be the same")
+	require.Equal(t, append(m1, m2...), final, "response and request must be the same")
 }

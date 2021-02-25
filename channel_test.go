@@ -13,11 +13,8 @@ import (
 )
 
 func TestChannel_Add(t *testing.T) {
-	ts, wsServer := wsServer()
-	defer ts.Close()
-	defer func() {
-		require.NoError(t, wsServer.Shutdown())
-	}()
+	ts, wsServer, shutdown := server(t)
+	defer shutdown()
 
 	ch := wsServer.NewChannel("test-channel-add")
 
@@ -35,12 +32,8 @@ func TestChannel_Add(t *testing.T) {
 }
 
 func TestChannel_Emit(t *testing.T) {
-	ts, wsServer := wsServer()
-	defer ts.Close()
-	defer func() {
-		err := wsServer.Shutdown()
-		require.NoError(t, err)
-	}()
+	ts, wsServer, shutdown := server(t)
+	defer shutdown()
 
 	ch := wsServer.NewChannel("test-channel-emit")
 
@@ -80,11 +73,8 @@ func TestChannel_Emit(t *testing.T) {
 }
 
 func TestChannel_Remove(t *testing.T) {
-	ts, wsServer := wsServer()
-	defer func() {
-		require.NoError(t, wsServer.Shutdown())
-		ts.Close()
-	}()
+	ts, wsServer, shutdown := server(t)
+	defer shutdown()
 
 	ch := wsServer.NewChannel("test-channel-add")
 
@@ -104,11 +94,8 @@ func TestChannel_Remove(t *testing.T) {
 }
 
 func TestChannel_Id(t *testing.T) {
-	ts, wsServer := wsServer()
-	defer ts.Close()
-	defer func() {
-		require.NoError(t, wsServer.Shutdown())
-	}()
+	_, wsServer, shutdown := server(t)
+	defer shutdown()
 
 	ch := wsServer.NewChannel("test-channel-id")
 	require.Equal(t, "test-channel-id", ch.ID(), "channel must have same id")

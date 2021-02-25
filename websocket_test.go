@@ -21,12 +21,8 @@ import (
 )
 
 func TestServer_Run(t *testing.T) {
-	ts, wsServer := wsServer()
-	defer ts.Close()
-	defer func() {
-		err := wsServer.Shutdown()
-		require.NoError(t, err)
-	}()
+	ts, wsServer, shutdown := server(t)
+	defer shutdown()
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, _, err := ws.Dial(context.Background(), u.String())
@@ -41,7 +37,7 @@ func TestServer_Run(t *testing.T) {
 }
 
 func TestServer_Shutdown(t *testing.T) {
-	ts, wsServer := wsServer()
+	ts, wsServer, _ := server(t)
 	defer ts.Close()
 
 	err := wsServer.Shutdown()
@@ -93,12 +89,8 @@ func TestServer_Handler(t *testing.T) {
 }
 
 func TestServer_Count(t *testing.T) {
-	ts, wsServer := wsServer()
-	defer ts.Close()
-	defer func() {
-		err := wsServer.Shutdown()
-		require.NoError(t, err)
-	}()
+	ts, wsServer, shutdown := server(t)
+	defer shutdown()
 
 	rand.Seed(time.Now().Unix())
 	number := rand.Intn(14-3) + 3
@@ -117,12 +109,8 @@ func TestServer_Count(t *testing.T) {
 }
 
 func TestServer_OnConnect(t *testing.T) {
-	ts, wsServer := wsServer()
-	defer ts.Close()
-	defer func() {
-		err := wsServer.Shutdown()
-		require.NoError(t, err)
-	}()
+	ts, wsServer, shutdown := server(t)
+	defer shutdown()
 
 	msg := Message{
 		Name: "TesT",
@@ -161,12 +149,8 @@ func TestServer_OnConnect(t *testing.T) {
 }
 
 func TestServer_OnConnect2(t *testing.T) {
-	ts, wsServer := wsServer()
-	defer ts.Close()
-	defer func() {
-		err := wsServer.Shutdown()
-		require.NoError(t, err)
-	}()
+	ts, wsServer, shutdown := server(t)
+	defer shutdown()
 
 	msg := []byte("Hello from byte array")
 	h := ws.Header{
@@ -200,12 +184,8 @@ func TestServer_OnConnect2(t *testing.T) {
 }
 
 func TestServer_OnDisconnect(t *testing.T) {
-	ts, wsServer := wsServer()
-	defer ts.Close()
-	defer func() {
-		err := wsServer.Shutdown()
-		require.NoError(t, err)
-	}()
+	ts, wsServer, shutdown := server(t)
+	defer shutdown()
 	done := make(chan bool, 1)
 
 	msg := Message{
@@ -250,12 +230,8 @@ func TestServer_OnDisconnect(t *testing.T) {
 }
 
 func TestServer_OnMessage(t *testing.T) {
-	ts, wsServer := wsServer()
-	defer ts.Close()
-	defer func() {
-		err := wsServer.Shutdown()
-		require.NoError(t, err)
-	}()
+	ts, wsServer, shutdown := server(t)
+	defer shutdown()
 
 	msg := []byte("Hello from byte array")
 
@@ -269,8 +245,7 @@ func TestServer_OnMessage(t *testing.T) {
 	c, _, _, err := ws.Dial(context.Background(), u.String())
 	require.NoError(t, err)
 	defer func() {
-		err := c.Close()
-		require.NoError(t, err)
+		require.NoError(t, c.Close())
 	}()
 
 	err = ws.WriteHeader(c, ws.Header{
@@ -280,20 +255,18 @@ func TestServer_OnMessage(t *testing.T) {
 		Length: int64(len(msg)),
 	})
 	require.NoError(t, err)
-
 	n, err := c.Write(msg)
 	require.NoError(t, err)
 	require.Equal(t, len(msg), n)
+
+	time.Sleep(time.Millisecond * 50)
 
 	<-done
 }
 
 func TestServer_On(t *testing.T) {
-	ts, wsServer := wsServer()
-	defer ts.Close()
-	defer func() {
-		require.NoError(t, wsServer.Shutdown())
-	}()
+	ts, wsServer, shutdown := server(t)
+	defer shutdown()
 
 	type dataStruct struct {
 		Test string `json:"test"`
@@ -344,12 +317,8 @@ func TestServer_On(t *testing.T) {
 }
 
 func TestServer_NewChannel(t *testing.T) {
-	ts, wsServer := wsServer()
-	defer ts.Close()
-	defer func() {
-		err := wsServer.Shutdown()
-		require.NoError(t, err)
-	}()
+	_, wsServer, shutdown := server(t)
+	defer shutdown()
 
 	ch := wsServer.NewChannel("test")
 	require.NotNil(t, ch, "must be channel")
@@ -359,12 +328,8 @@ func TestServer_NewChannel(t *testing.T) {
 }
 
 func TestServer_Emit(t *testing.T) {
-	ts, wsServer := wsServer()
-	defer ts.Close()
-	defer func() {
-		err := wsServer.Shutdown()
-		require.NoError(t, err)
-	}()
+	ts, wsServer, shutdown := server(t)
+	defer shutdown()
 
 	msg := Message{
 		Name: "test",
@@ -403,11 +368,8 @@ func TestServer_Channel(t *testing.T) {
 }
 
 func TestServerListen(t *testing.T) {
-	ts, wsServer := wsServer()
-	defer ts.Close()
-	defer func() {
-		require.NoError(t, wsServer.Shutdown())
-	}()
+	ts, wsServer, shutdown := server(t)
+	defer shutdown()
 
 	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
 	c, _, _, err := ws.Dial(context.Background(), u.String())
@@ -452,12 +414,8 @@ func TestServerListen(t *testing.T) {
 }
 
 func TestServerNotFound(t *testing.T) {
-	ts, wsServer := wsServer()
-	defer ts.Close()
-	defer func() {
-		err := wsServer.Shutdown()
-		require.NoError(t, err)
-	}()
+	ts, _, shutdown := server(t)
+	defer shutdown()
 
 	msg := []byte("Hello World")
 
@@ -490,12 +448,8 @@ func TestServerNotFound(t *testing.T) {
 }
 
 func TestServerProcessMessage(t *testing.T) {
-	ts, wsServer := wsServer()
-	defer ts.Close()
-	defer func() {
-		err := wsServer.Shutdown()
-		require.NoError(t, err)
-	}()
+	ts, _, shutdown := server(t)
+	defer shutdown()
 
 	msg := []byte("")
 
@@ -531,11 +485,8 @@ func TestServerProcessMessage(t *testing.T) {
 }
 
 func TestServer_ConnectionClose(t *testing.T) {
-	ts, wsServer := wsServer()
-	defer func() {
-		require.NoError(t, wsServer.Shutdown())
-		ts.Close()
-	}()
+	ts, wsServer, shutdown := server(t)
+	defer shutdown()
 
 	ch := wsServer.NewChannel("test-channel-add")
 	msg := Message{
@@ -608,12 +559,16 @@ func TestServer_ConnectionClose(t *testing.T) {
 	require.Equal(t, 0, ch.Count())
 }
 
-func wsServer() (*httptest.Server, *Server) {
+func server(t *testing.T) (*httptest.Server, *Server, func()) {
 	wsServer := Start(context.Background())
-	r := chi.NewRouter()
 
+	r := chi.NewRouter()
 	r.Get("/ws", wsServer.Handler)
 
 	ts := httptest.NewServer(r)
-	return ts, wsServer
+
+	return ts, wsServer, func() {
+		require.NoError(t, wsServer.Shutdown())
+		ts.Close()
+	}
 }

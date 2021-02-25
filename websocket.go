@@ -207,7 +207,7 @@ func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 	for {
 		header, _ := ws.ReadHeader(conn)
 		if err = ws.CheckHeader(header, state); err != nil {
-			log.Printf("drop connection: CheckHeader: %v", err)
+			log.Printf("drop ws connection: %v", err)
 			s.dropConn(connection)
 			break
 		}
@@ -262,7 +262,7 @@ func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err != nil || header.OpCode == ws.OpClose {
-			log.Printf("drop connection: %v or OpClose", err)
+			log.Printf("drop ws connection: OpClose (%v)", err)
 			s.dropConn(connection)
 			break
 		}

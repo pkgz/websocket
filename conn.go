@@ -92,6 +92,9 @@ func (c *Conn) Send(data interface{}) error {
 
 // Close closing websocket connection.
 func (c *Conn) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if c.conn == nil {
 		return nil
 	}

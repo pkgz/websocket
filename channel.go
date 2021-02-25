@@ -76,6 +76,7 @@ func (c *Channel) Emit(name string, data interface{}) {
 	for con := range c.connections {
 		if err := con.Emit(name, data); err != nil {
 			_ = con.Close()
+
 			c.mu.Unlock()
 			c.Remove(con)
 			c.mu.Lock()
