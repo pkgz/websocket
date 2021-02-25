@@ -9,6 +9,7 @@ import (
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"github.com/stretchr/testify/require"
+	"log"
 	"math/rand"
 	"net"
 	"net/http"
@@ -527,6 +528,84 @@ func TestServerProcessMessage(t *testing.T) {
 		require.Equal(t, msg, b[messagePrefix:], "response message must be the same as send (byte array)")
 		break
 	}
+}
+
+func TestServer_ConnectionClose(t *testing.T) {
+	ts, wsServer := wsServer()
+	defer func() {
+		require.NoError(t, wsServer.Shutdown())
+		ts.Close()
+	}()
+
+	ch := wsServer.NewChannel("test-channel-add")
+	msg := Message{
+		Name: "test",
+		Data: []byte("Hello World"),
+	}
+	messageBytes, err := json.Marshal(msg)
+	require.NoError(t, err)
+
+	ticker := time.NewTicker(time.Millisecond * 1)
+	done := make(chan bool, 1)
+
+	wsServer.OnConnect(func(c *Conn) {
+		ch.Add(c)
+		require.Equal(t, 1, ch.Count(), "channel must contain only 1 connection")
+		log.Print("Connected")
+	})
+	wsServer.OnDisconnect(func(c *Conn) {
+		log.Print("Disconnected")
+	})
+	wsServer.On("test", func(c *Conn, msg *Message) {
+		log.Printf("message: %s", msg.Name)
+	})
+
+	u := url.URL{Scheme: "ws", Host: strings.Replace(ts.URL, "http://", "", 1), Path: "/ws"}
+	c, _, _, err := ws.Dial(context.Background(), u.String())
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, c.Close())
+	}()
+
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				err = ws.WriteHeader(c, ws.Header{
+					Fin:    true,
+					OpCode: ws.OpText,
+					Masked: true,
+					Length: int64(len(messageBytes)),
+				})
+				require.NoError(t, err)
+
+				n, err := c.Write(messageBytes)
+				require.NoError(t, err)
+				require.Equal(t, len(messageBytes), n)
+			case <-done:
+				ticker.Stop()
+				return
+			}
+		}
+	}()
+
+	time.Sleep(time.Millisecond * 50)
+
+	done <- true
+
+	time.Sleep(time.Millisecond * 5)
+
+	err = ws.WriteHeader(c, ws.Header{
+		Fin:    true,
+		OpCode: ws.OpClose,
+		Masked: true,
+		Length: 0,
+	})
+	require.NoError(t, err)
+
+	time.Sleep(time.Millisecond * 5)
+
+	require.Equal(t, 0, ch.Count())
 }
 
 func wsServer() (*httptest.Server, *Server) {

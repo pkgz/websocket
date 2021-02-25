@@ -25,6 +25,7 @@ func newChannel(id string) *Channel {
 			select {
 			case conn := <-c.delConn:
 				c.mu.Lock()
+				_ = conn.Close()
 				delete(c.connections, conn)
 				c.mu.Unlock()
 			}

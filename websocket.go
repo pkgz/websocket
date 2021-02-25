@@ -207,8 +207,9 @@ func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 	for {
 		header, _ := ws.ReadHeader(conn)
 		if err = ws.CheckHeader(header, state); err != nil {
+			log.Printf("drop connection: CheckHeader: %v", err)
 			s.dropConn(connection)
-			return
+			break
 		}
 
 		cipherReader.Reset(io.LimitReader(conn, header.Length), header.Mask)
@@ -261,8 +262,9 @@ func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err != nil || header.OpCode == ws.OpClose {
+			log.Printf("drop connection: %v or OpClose", err)
 			s.dropConn(connection)
-			return
+			break
 		}
 
 		header.Masked = false

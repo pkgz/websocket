@@ -81,9 +81,9 @@ func TestChannel_Emit(t *testing.T) {
 
 func TestChannel_Remove(t *testing.T) {
 	ts, wsServer := wsServer()
-	defer ts.Close()
 	defer func() {
 		require.NoError(t, wsServer.Shutdown())
+		ts.Close()
 	}()
 
 	ch := wsServer.NewChannel("test-channel-add")

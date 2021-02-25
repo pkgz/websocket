@@ -92,6 +92,10 @@ func (c *Conn) Send(data interface{}) error {
 
 // Close closing websocket connection.
 func (c *Conn) Close() error {
+	if c.conn == nil {
+		return nil
+	}
+
 	c.done <- true
 
 	err := c.conn.Close()
