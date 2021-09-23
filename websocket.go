@@ -67,7 +67,7 @@ import (
 	"sync"
 )
 
-// Server allow to keep connection list, broadcast channel and callbacks list.
+// Server allows keeping connection list, broadcast channel and callbacks list.
 type Server struct {
 	connections map[*Conn]bool
 	channels    map[string]*Channel
@@ -92,13 +92,12 @@ type Message struct {
 	Data []byte `json:"data"`
 }
 
-// HandleFunc is a type for handle function
-// all function which has callback have this struct
+// HandlerFunc is a type for handle function all function which has callback have this struct
 // as first element returns pointer to connection
 // its give opportunity to close connection or emit message to exactly this connection.
 type HandlerFunc func(c *Conn, msg *Message)
 
-// Create a new websocket server handler with the provided options.
+// New websocket server handler with the provided options.
 func New() *Server {
 	srv := &Server{
 		connections: make(map[*Conn]bool),
@@ -300,7 +299,7 @@ func (s *Server) Channel(id string) *Channel {
 	return s.channels[id]
 }
 
-// Count return channels id with live connections.
+// Channels returns channels id with live connections.
 func (s *Server) Channels() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -315,28 +314,28 @@ func (s *Server) Channels() []string {
 	return list
 }
 
-// Set function which will be called when new connections come.
+// OnConnect function which will be called when new connections come.
 func (s *Server) OnConnect(f func(c *Conn)) {
 	s.mu.Lock()
 	s.onConnect = f
 	s.mu.Unlock()
 }
 
-// Set function which will be called when new connections come.
+// OnDisconnect function which will be called when new connections come.
 func (s *Server) OnDisconnect(f func(c *Conn)) {
 	s.mu.Lock()
 	s.onDisconnect = f
 	s.mu.Unlock()
 }
 
-// OnMessage handling byte message. By default this function works as echo.
+// OnMessage handling byte message. This function works as echo by default
 func (s *Server) OnMessage(f func(c *Conn, h ws.Header, b []byte)) {
 	s.mu.Lock()
 	s.onMessage = f
 	s.mu.Unlock()
 }
 
-// Emit emit message to all connections.
+// Emit message to all connections.
 func (s *Server) Emit(name string, data []byte) {
 	s.broadcast <- Message{
 		Name: name,

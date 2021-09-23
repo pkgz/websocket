@@ -55,21 +55,21 @@ func (c *Channel) ID() string {
 	return c.id
 }
 
-// Add add connection to channel.
+// Add connection to channel.
 func (c *Channel) Add(conn *Conn) {
 	c.mu.Lock()
 	c.connections[conn] = true
 	c.mu.Unlock()
 }
 
-// Remove remove connection from channel.
+// Remove connection from channel.
 func (c *Channel) Remove(conn *Conn) {
 	c.mu.Lock()
 	delete(c.connections, conn)
 	c.mu.Unlock()
 }
 
-// Emit emits message to all connections in channel.
+// Emit message to all connections in channel.
 func (c *Channel) Emit(name string, data interface{}) {
 	c.mu.Lock()
 

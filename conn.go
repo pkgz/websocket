@@ -27,12 +27,12 @@ var pingHeader = ws.Header{
 
 var PingInterval = time.Second * 5
 
-// ID return an connection identifier (may be not unique)
+// ID return an connection identifier (could be not unique)
 func (c *Conn) ID() string {
 	return c.id
 }
 
-// Emit emit message to connection.
+// Emit message to connection.
 func (c *Conn) Emit(name string, data interface{}) error {
 	var msg = struct {
 		Name string      `json:"name"`
@@ -54,7 +54,7 @@ func (c *Conn) Emit(name string, data interface{}) error {
 	return c.Write(h, b)
 }
 
-// Write write byte array to connection.
+// Write byte array to connection.
 func (c *Conn) Write(h ws.Header, b []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -69,7 +69,7 @@ func (c *Conn) Write(h ws.Header, b []byte) error {
 	return err
 }
 
-// Send send data to connection.
+// Send data to connection.
 func (c *Conn) Send(data interface{}) error {
 	var b []byte
 	switch data.(type) {
