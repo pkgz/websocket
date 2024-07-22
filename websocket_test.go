@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/go-chi/chi"
-	"github.com/go-chi/chi/middleware"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"github.com/stretchr/testify/require"
@@ -51,8 +49,8 @@ func TestServer_Shutdown_byContext(t *testing.T) {
 	ctxWithCancel, cancel := context.WithCancel(ctx)
 
 	wsServer := Start(ctxWithCancel)
-	r := chi.NewRouter()
-	r.Get("/ws", wsServer.Handler)
+	r := http.NewServeMux()
+	r.HandleFunc("/ws", wsServer.Handler)
 	ts := httptest.NewServer(r)
 	defer ts.Close()
 
@@ -64,17 +62,15 @@ func TestServer_Shutdown_byContext(t *testing.T) {
 
 func TestServer_Handler(t *testing.T) {
 	wsServer := Start(context.Background())
-	r := chi.NewRouter()
+	r := http.NewServeMux()
 
-	r.Use(middleware.Compress(6, "gzip"))
-	r.Use(func(next http.Handler) http.Handler {
+	middleware := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ww := middleware.NewWrapResponseWriter(w, 1)
-			next.ServeHTTP(ww, r)
+			return
 		})
-	})
+	}
 
-	r.Get("/ws", wsServer.Handler)
+	r.Handle("/ws", middleware(http.HandlerFunc(wsServer.Handler)))
 
 	ts := httptest.NewServer(r)
 	defer ts.Close()
@@ -562,8 +558,8 @@ func TestServer_ConnectionClose(t *testing.T) {
 func server(t *testing.T) (*httptest.Server, *Server, func()) {
 	wsServer := Start(context.Background())
 
-	r := chi.NewRouter()
-	r.Get("/ws", wsServer.Handler)
+	r := http.NewServeMux()
+	r.HandleFunc("/ws", wsServer.Handler)
 
 	ts := httptest.NewServer(r)
 

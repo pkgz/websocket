@@ -1,14 +1,17 @@
 module github.com/pkgz/websocket
 
-go 1.16
+go 1.22.0
+
+require (
+	github.com/gobwas/ws v1.4.0
+	github.com/stretchr/testify v1.9.0
+)
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/go-chi/chi v4.0.2+incompatible
-	github.com/gobwas/httphead v0.0.0-20180130184737-2c6c146eadee // indirect
-	github.com/gobwas/pool v0.2.0 // indirect
-	github.com/gobwas/ws v1.0.0
+	github.com/gobwas/httphead v0.1.0 // indirect
+	github.com/gobwas/pool v0.2.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/stretchr/testify v1.2.2
-	golang.org/x/net v0.7.0 // indirect
+	golang.org/x/sys v0.22.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

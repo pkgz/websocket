@@ -7,15 +7,15 @@ Echo server:
 
 	import (
 		"github.com/pkgz/websocket"
-		"github.com/go-chi/chi"
 		"net/http"
 	)
 
 	func main () {
-		r := chi.NewRouter()
+		r := http.NewServeMux()
 		wsServer := websocket.Start(context.Background())
 
-		r.Get("/ws", wsServer.Handler)
+		r.HandleFunc("/ws", wsServer.Handler)
+
 		wsServer.On("echo", func(c *websocket.Conn, msg *websocket.Message) {
 			c.Emit("echo", msg.Data)
 		})
@@ -28,12 +28,12 @@ Websocket with group:
 
 	import (
 		"github.com/pkgz/websocket"
-		"github.com/go-chi/chi"
 		"net/http"
 	)
 
 	func main () {
-		r := chi.NewRouter()
+		r := http.NewServeMux()
+
 		wsServer := websocket.Start(context.Background())
 
 		ch := wsServer.NewChannel("test")
@@ -43,7 +43,7 @@ Websocket with group:
 			ch.Emit("connection", []byte("new connection come"))
 		})
 
-		r.Get("/ws", wsServer.Handler)
+		r.HandleFunc("/ws", wsServer.Handler)
 		http.ListenAndServe(":8080", r)
 	}
 
@@ -402,9 +402,10 @@ func (s *Server) processMessage(c *Conn, h ws.Header, b []byte) error {
 					Name: msg.Name,
 					Data: buf,
 				})
-			} else {
-				return fmt.Errorf("missing callback for %s", msg.Name)
+				return nil
 			}
+
+			s.onMessage(c, h, b)
 		default:
 			s.onMessage(c, h, b)
 			return nil
