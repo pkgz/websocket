@@ -26,6 +26,7 @@ var pingHeader = ws.Header{
 }
 
 var PingInterval = time.Second * 5
+var TextMessage = false
 
 // ID return an connection identifier (could be not unique)
 func (c *Conn) ID() string {
@@ -44,9 +45,13 @@ func (c *Conn) Emit(name string, data interface{}) error {
 
 	b, _ := json.Marshal(msg)
 
+	opCode := ws.OpBinary
+	if TextMessage {
+		opCode = ws.OpText
+	}
 	h := ws.Header{
 		Fin:    true,
-		OpCode: ws.OpText,
+		OpCode: opCode,
 		Masked: false,
 		Length: int64(len(b)),
 	}
@@ -70,8 +75,9 @@ func (c *Conn) Write(h ws.Header, b []byte) error {
 }
 
 // Send data to connection.
-func (c *Conn) Send(data interface{}) error {
+func (c *Conn) Send(data any) error {
 	var b []byte
+
 	switch data.(type) {
 	case []byte:
 		b = data.([]byte)
@@ -79,9 +85,13 @@ func (c *Conn) Send(data interface{}) error {
 		b, _ = json.Marshal(data)
 	}
 
+	opCode := ws.OpBinary
+	if TextMessage {
+		opCode = ws.OpText
+	}
 	h := ws.Header{
 		Fin:    true,
-		OpCode: ws.OpText,
+		OpCode: opCode,
 		Masked: false,
 		Length: int64(len(b)),
 	}

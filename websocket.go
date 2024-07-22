@@ -59,7 +59,6 @@ import (
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -224,7 +223,7 @@ func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 			_, _ = io.CopyN(conn, cipherReader, header.Length)
 			continue
 		case ws.OpPong:
-			_, _ = io.CopyN(ioutil.Discard, conn, header.Length)
+			_, _ = io.CopyN(io.Discard, conn, header.Length)
 			continue
 		case ws.OpClose:
 			utf8Fin = true
@@ -261,7 +260,9 @@ func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err != nil || header.OpCode == ws.OpClose {
-			log.Printf("drop ws connection: OpClose (%v)", err)
+			if err != nil {
+				log.Printf("drop ws connection: OpClose (%v)", err)
+			}
 			s.dropConn(connection)
 			break
 		}
@@ -372,47 +373,33 @@ func (s *Server) IsClosed() bool {
 }
 
 func (s *Server) processMessage(c *Conn, h ws.Header, b []byte) error {
-	var msg struct {
-		Name string      `json:"name"`
-		Data interface{} `json:"data"`
-	}
-
 	if len(b) == 0 {
 		s.onMessage(c, h, b)
 		return nil
 	}
 
-	switch h.OpCode {
-	case ws.OpBinary:
+	if h.OpCode != ws.OpBinary && h.OpCode != ws.OpText {
 		s.onMessage(c, h, b)
-	case ws.OpText:
-		switch b[0] {
-		case 123:
-			if err := json.Unmarshal(b, &msg); err != nil {
-				return err
-			}
-
-			if s.callbacks[msg.Name] != nil {
-				buf, err := json.Marshal(msg.Data)
-				if err != nil {
-					return err
-				}
-
-				s.callbacks[msg.Name](c, &Message{
-					Name: msg.Name,
-					Data: buf,
-				})
-				return nil
-			}
-
-			s.onMessage(c, h, b)
-		default:
-			s.onMessage(c, h, b)
-			return nil
-		}
-	default:
-		s.onMessage(c, h, b)
+		return nil
 	}
+
+	var msg struct {
+		Name string `json:"name"`
+		Data any    `json:"data"`
+	}
+
+	if err := json.Unmarshal(b, &msg); err == nil && s.callbacks[msg.Name] != nil {
+		buf, err := json.Marshal(msg.Data)
+		if err != nil {
+			return err
+		}
+		s.callbacks[msg.Name](c, &Message{
+			Name: msg.Name,
+			Data: buf,
+		})
+		return nil
+	}
+	s.onMessage(c, h, b)
 
 	return nil
 }
