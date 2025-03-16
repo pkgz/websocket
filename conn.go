@@ -26,7 +26,8 @@ var pingHeader = ws.Header{
 }
 
 var PingInterval = time.Second * 5
-var TextMessage = false
+
+const TextMessage = false
 
 // ID return an connection identifier (could be not unique)
 func (c *Conn) ID() string {
@@ -43,7 +44,10 @@ func (c *Conn) Emit(name string, data interface{}) error {
 		Data: data,
 	}
 
-	b, _ := json.Marshal(msg)
+	b, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
 
 	opCode := ws.OpBinary
 	if TextMessage {
@@ -96,8 +100,7 @@ func (c *Conn) Send(data any) error {
 		Length: int64(len(b)),
 	}
 
-	err := c.Write(h, b)
-	return err
+	return c.Write(h, b)
 }
 
 // Close closing websocket connection.

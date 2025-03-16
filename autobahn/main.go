@@ -12,7 +12,7 @@ func main() {
 	r := http.NewServeMux()
 	r.HandleFunc("/", wsServer.Handler)
 
-	wsServer.On("echo", func(c *websocket.Conn, msg *websocket.Message) {
+	wsServer.On("echo", func(ctx context.Context, c *websocket.Conn, msg *websocket.Message) {
 		_ = c.Emit("echo", msg.Data)
 	})
 

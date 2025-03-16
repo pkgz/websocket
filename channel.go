@@ -21,14 +21,11 @@ func newChannel(id string) *Channel {
 	}
 
 	go func() {
-		for {
-			select {
-			case conn := <-c.delConn:
-				c.mu.Lock()
-				_ = conn.Close()
-				delete(c.connections, conn)
-				c.mu.Unlock()
-			}
+		for conn := range c.delConn {
+			c.mu.Lock()
+			_ = conn.Close()
+			delete(c.connections, conn)
+			c.mu.Unlock()
 		}
 	}()
 

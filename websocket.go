@@ -16,7 +16,7 @@ Echo server:
 
 		r.HandleFunc("/ws", wsServer.Handler)
 
-		wsServer.On("echo", func(c *websocket.Conn, msg *websocket.Message) {
+		wsServer.On("echo", func(ctx context.Context, c *websocket.Conn, msg *websocket.Message) {
 			c.Emit("echo", msg.Data)
 		})
 
@@ -38,7 +38,7 @@ Websocket with group:
 
 		ch := wsServer.NewChannel("test")
 
-		wsServer.OnConnect(func(c *websocket.Conn) {
+		wsServer.OnConnect(func(ctx context.Context, c *websocket.Conn) {
 			ch.Add(c)
 			ch.Emit("connection", []byte("new connection come"))
 		})
@@ -75,9 +75,9 @@ type Server struct {
 
 	delChan []chan *Conn
 
-	onConnect    func(c *Conn)
-	onDisconnect func(c *Conn)
-	onMessage    func(c *Conn, h ws.Header, b []byte)
+	onConnect    func(ctx context.Context, c *Conn)
+	onDisconnect func(ctx context.Context, c *Conn)
+	onMessage    func(ctx context.Context, c *Conn, h ws.Header, b []byte)
 
 	done bool
 	mu   sync.RWMutex
@@ -94,7 +94,7 @@ type Message struct {
 // HandlerFunc is a type for handle function all function which has callback have this struct
 // as first element returns pointer to connection
 // its give opportunity to close connection or emit message to exactly this connection.
-type HandlerFunc func(c *Conn, msg *Message)
+type HandlerFunc func(ctx context.Context, c *Conn, msg *Message)
 
 // New websocket server handler with the provided options.
 func New() *Server {
@@ -104,7 +104,7 @@ func New() *Server {
 		broadcast:   make(chan Message),
 		callbacks:   make(map[string]HandlerFunc),
 	}
-	srv.onMessage = func(c *Conn, h ws.Header, b []byte) {
+	srv.onMessage = func(ctx context.Context, c *Conn, h ws.Header, b []byte) {
 		_ = c.Write(h, b)
 	}
 	return srv
@@ -168,6 +168,7 @@ func (s *Server) Shutdown() error {
 
 // Handler get upgrade connection to RFC 6455 and starting listener for it.
 func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	var params url.Values = nil
 
 	conn, _, _, err := ws.UpgradeHTTP(r, w)
@@ -194,7 +195,7 @@ func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 		done:   make(chan bool, 1),
 	}
 	connection.startPing()
-	s.addConn(connection)
+	s.addConn(ctx, connection)
 
 	textPending := false
 
@@ -206,7 +207,7 @@ func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 		header, _ := ws.ReadHeader(conn)
 		if err = ws.CheckHeader(header, state); err != nil {
 			log.Printf("drop ws connection: %v", err)
-			s.dropConn(connection)
+			s.dropConn(ctx, connection)
 			break
 		}
 
@@ -263,12 +264,12 @@ func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				log.Printf("drop ws connection: OpClose (%v)", err)
 			}
-			s.dropConn(connection)
+			s.dropConn(ctx, connection)
 			break
 		}
 
 		header.Masked = false
-		if err = s.processMessage(connection, header, payload); err != nil {
+		if err = s.processMessage(ctx, connection, header, payload); err != nil {
 			log.Print(err)
 		}
 	}
@@ -316,21 +317,21 @@ func (s *Server) Channels() []string {
 }
 
 // OnConnect function which will be called when new connections come.
-func (s *Server) OnConnect(f func(c *Conn)) {
+func (s *Server) OnConnect(f func(ctx context.Context, c *Conn)) {
 	s.mu.Lock()
 	s.onConnect = f
 	s.mu.Unlock()
 }
 
 // OnDisconnect function which will be called when new connections come.
-func (s *Server) OnDisconnect(f func(c *Conn)) {
+func (s *Server) OnDisconnect(f func(ctx context.Context, c *Conn)) {
 	s.mu.Lock()
 	s.onDisconnect = f
 	s.mu.Unlock()
 }
 
 // OnMessage handling byte message. This function works as echo by default
-func (s *Server) OnMessage(f func(c *Conn, h ws.Header, b []byte)) {
+func (s *Server) OnMessage(f func(ctx context.Context, c *Conn, h ws.Header, b []byte)) {
 	s.mu.Lock()
 	s.onMessage = f
 	s.mu.Unlock()
@@ -372,14 +373,14 @@ func (s *Server) IsClosed() bool {
 	return s.done
 }
 
-func (s *Server) processMessage(c *Conn, h ws.Header, b []byte) error {
+func (s *Server) processMessage(ctx context.Context, c *Conn, h ws.Header, b []byte) error {
 	if len(b) == 0 {
-		s.onMessage(c, h, b)
+		s.onMessage(ctx, c, h, b)
 		return nil
 	}
 
 	if h.OpCode != ws.OpBinary && h.OpCode != ws.OpText {
-		s.onMessage(c, h, b)
+		s.onMessage(ctx, c, h, b)
 		return nil
 	}
 
@@ -393,20 +394,20 @@ func (s *Server) processMessage(c *Conn, h ws.Header, b []byte) error {
 		if err != nil {
 			return err
 		}
-		s.callbacks[msg.Name](c, &Message{
+		s.callbacks[msg.Name](ctx, c, &Message{
 			Name: msg.Name,
 			Data: buf,
 		})
 		return nil
 	}
-	s.onMessage(c, h, b)
+	s.onMessage(ctx, c, h, b)
 
 	return nil
 }
 
-func (s *Server) addConn(conn *Conn) {
-	if !reflect.ValueOf(s.onConnect).IsNil() {
-		go s.onConnect(conn)
+func (s *Server) addConn(ctx context.Context, conn *Conn) {
+	if s.onConnect != nil {
+		go s.onConnect(ctx, conn)
 	}
 
 	s.mu.Lock()
@@ -414,9 +415,9 @@ func (s *Server) addConn(conn *Conn) {
 	s.mu.Unlock()
 }
 
-func (s *Server) dropConn(conn *Conn) {
+func (s *Server) dropConn(ctx context.Context, conn *Conn) {
 	if !reflect.ValueOf(s.onDisconnect).IsNil() {
-		go s.onDisconnect(conn)
+		go s.onDisconnect(ctx, conn)
 	}
 
 	go func() {

@@ -18,7 +18,7 @@ func TestChannel_Add(t *testing.T) {
 
 	ch := wsServer.NewChannel("test-channel-add")
 
-	wsServer.OnConnect(func(c *Conn) {
+	wsServer.OnConnect(func(ctx context.Context, c *Conn) {
 		ch.Add(c)
 		require.Equal(t, 1, ch.Count(), "channel must contain only 1 connection")
 	})
@@ -44,7 +44,7 @@ func TestChannel_Emit(t *testing.T) {
 	messageBytes, err := json.Marshal(_message)
 	require.NoError(t, err)
 
-	wsServer.OnConnect(func(c *Conn) {
+	wsServer.OnConnect(func(ctx context.Context, c *Conn) {
 		ch.Add(c)
 		time.Sleep(300 * time.Millisecond)
 		ch.Emit(_message.Name, _message.Data)
@@ -78,7 +78,7 @@ func TestChannel_Remove(t *testing.T) {
 
 	ch := wsServer.NewChannel("test-channel-add")
 
-	wsServer.OnConnect(func(c *Conn) {
+	wsServer.OnConnect(func(ctx context.Context, c *Conn) {
 		ch.Add(c)
 		require.Equal(t, 1, ch.Count(), "channel must contain only 1 connection")
 		ch.Remove(c)

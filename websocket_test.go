@@ -115,7 +115,7 @@ func TestServer_OnConnect(t *testing.T) {
 	messageBytes, err := json.Marshal(msg)
 	require.NoError(t, err)
 
-	wsServer.OnConnect(func(c *Conn) {
+	wsServer.OnConnect(func(ctx context.Context, c *Conn) {
 		time.Sleep(300 * time.Millisecond)
 		err := c.Emit(msg.Name, msg.Data)
 		require.NoError(t, err)
@@ -155,7 +155,7 @@ func TestServer_OnConnect2(t *testing.T) {
 		Length: int64(len(msg)),
 	}
 
-	wsServer.OnConnect(func(c *Conn) {
+	wsServer.OnConnect(func(ctx context.Context, c *Conn) {
 		time.Sleep(300 * time.Millisecond)
 		err := c.Write(h, msg)
 		require.NoError(t, err)
@@ -189,7 +189,7 @@ func TestServer_OnDisconnect(t *testing.T) {
 		Data: []byte("Hello World"),
 	}
 
-	wsServer.OnDisconnect(func(c *Conn) {
+	wsServer.OnDisconnect(func(ctx context.Context, c *Conn) {
 		time.Sleep(300 * time.Millisecond)
 		_ = c.Emit(msg.Name, msg.Data)
 		done <- true
@@ -232,7 +232,7 @@ func TestServer_OnMessage(t *testing.T) {
 	msg := []byte("Hello from byte array")
 
 	done := make(chan bool, 1)
-	wsServer.OnMessage(func(c *Conn, h ws.Header, b []byte) {
+	wsServer.OnMessage(func(ctx context.Context, c *Conn, h ws.Header, b []byte) {
 		require.Equal(t, msg, b, "response message must be the same as send")
 		done <- true
 	})
@@ -283,7 +283,7 @@ func TestServer_On(t *testing.T) {
 
 	done := make(chan bool, 1)
 
-	wsServer.On("LoL", func(c *Conn, msg *Message) {
+	wsServer.On("LoL", func(ctx context.Context, c *Conn, msg *Message) {
 		require.Equal(t, _message.Name, msg.Name)
 		var respData dataStruct
 		require.NoError(t, json.Unmarshal(msg.Data, &respData))
@@ -386,7 +386,7 @@ func TestServerListen(t *testing.T) {
 	messageBytes, err := json.Marshal(message)
 	require.NoError(t, err)
 
-	wsServer.On("echo", func(c *Conn, msg *Message) {
+	wsServer.On("echo", func(ctx context.Context, c *Conn, msg *Message) {
 		require.Equal(t, message.Name, msg.Name)
 		var respData string
 		require.NoError(t, json.Unmarshal(msg.Data, &respData))
@@ -495,15 +495,15 @@ func TestServer_ConnectionClose(t *testing.T) {
 	ticker := time.NewTicker(time.Millisecond * 1)
 	done := make(chan bool, 1)
 
-	wsServer.OnConnect(func(c *Conn) {
+	wsServer.OnConnect(func(ctx context.Context, c *Conn) {
 		ch.Add(c)
 		require.Equal(t, 1, ch.Count(), "channel must contain only 1 connection")
 		log.Print("Connected")
 	})
-	wsServer.OnDisconnect(func(c *Conn) {
+	wsServer.OnDisconnect(func(ctx context.Context, c *Conn) {
 		log.Print("Disconnected")
 	})
-	wsServer.On("test", func(c *Conn, msg *Message) {
+	wsServer.On("test", func(ctx context.Context, c *Conn, msg *Message) {
 		log.Printf("message: %s", msg.Name)
 	})
 
